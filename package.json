@@ -1,0 +1,23 @@
+{
+  "name": "tipping-competition",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "next": "14.2.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@supabase/supabase-js": "2.43.4",
+    "@supabase/ssr": "0.3.0"
+  },
+  "devDependencies": {
+    "typescript": "5.4.5",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "@types/node": "20.14.2"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  }
+}
