@@ -17,9 +17,10 @@ export default async function DashboardPage() {
       </div>
       <p>Welcome, {user.email}!</p>
       <nav style={{ marginTop: 24 }}>
-        <ul>
-          <li><a href="/tips">Submit Tips</a></li>
-          <li><a href="/leaderboard">Leaderboard</a></li>
+        <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <li><a href="/tips" style={{ fontSize: 16 }}>🏉 Submit Tips</a></li>
+          <li><a href="/leaderboard" style={{ fontSize: 16 }}>🏆 Leaderboard</a></li>
+          <li><a href="/payments" style={{ fontSize: 16 }}>💰 Payments</a></li>
         </ul>
       </nav>
     </main>
