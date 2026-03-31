@@ -433,6 +433,7 @@ export default async function AdminPage() {
           <a href="/admin/long-haul" className="btn btn-primary">🏁 Long Haul</a>
           <a href="/admin/margin" className="btn btn-primary">📐 Margin Tipping</a>
           <a href="/admin/precision" className="btn btn-primary">🎯 Precision</a>
+          <a href="/admin/finals" className="btn btn-primary">🏆 Finals</a>
         </div>
       </div>
 
