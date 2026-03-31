@@ -15,22 +15,14 @@ export async function POST(req: NextRequest) {
   if (!profile?.is_admin) return NextResponse.redirect(new URL('/dashboard', req.url))
 
   const formData = await req.formData()
-  const name = formData.get('name') as string
-  const season_id = Number(formData.get('season_id'))
-  const entry_fee = formData.get('entry_fee') ? Number(formData.get('entry_fee')) : null
-  const is_active = formData.get('is_active') === 'true'
+  const id = Number(formData.get('id'))
 
-  if (is_active) {
-    await supabase.from('competitions').update({ is_active: false }).neq('id', 0)
-  }
+  // Deactivate all competitions first
+  await supabase.from('competitions').update({ is_active: false }).neq('id', 0)
 
-  const { error } = await supabase.from('competitions').insert({
-    name,
-    season_id,
-    entry_fee,
-    is_active,
-  })
+  // Activate the selected one
+  const { error } = await supabase.from('competitions').update({ is_active: true }).eq('id', id)
 
-  if (error) return NextResponse.redirect(new URL('/admin?error=competition', req.url))
+  if (error) return NextResponse.redirect(new URL('/admin?error=activate', req.url))
   return NextResponse.redirect(new URL('/admin', req.url))
 }

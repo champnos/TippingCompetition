@@ -289,6 +289,7 @@ export default async function AdminPage() {
                   <th>Season</th>
                   <th>Entry Fee</th>
                   <th>Active</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -299,6 +300,14 @@ export default async function AdminPage() {
                     <td>{(seasons ?? []).find((s) => s.id === c.season_id)?.year ?? c.season_id}</td>
                     <td>{c.entry_fee != null ? `$${c.entry_fee}` : '—'}</td>
                     <td>{c.is_active ? '✅ Active' : 'No'}</td>
+                    <td>
+                      {!c.is_active && (
+                        <form action="/api/admin/competition/activate" method="POST" style={{ display: 'inline' }}>
+                          <input type="hidden" name="id" value={c.id} />
+                          <button type="submit" className="btn btn-sm btn-gold">Set Active</button>
+                        </form>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -326,6 +335,12 @@ export default async function AdminPage() {
             <div className="form-field">
               <label className="form-label">Entry Fee ($)</label>
               <input type="number" name="entry_fee" placeholder="e.g. 20" min={0} step="0.01" className="form-input" />
+            </div>
+            <div className="form-field">
+              <label className="form-label">
+                <input type="checkbox" name="is_active" value="true" style={{ marginRight: 6 }} />
+                Set as Active Competition
+              </label>
             </div>
             <div className="form-field" style={{ justifyContent: 'flex-end' }}>
               <button type="submit" className="btn btn-primary">Add Competition</button>
