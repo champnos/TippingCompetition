@@ -9,7 +9,6 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <head />
       <body>
         <nav className="top-nav">
           <a href="/dashboard" className="top-nav-brand">🏉 Mancini Tipping</a>
