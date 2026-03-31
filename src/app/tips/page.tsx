@@ -59,7 +59,7 @@ export default async function TipsPage() {
   }
 
   const roundMap: Record<number, { round_number: number; games: Game[] }> = {}
-  for (const g of (games ?? []) as Game[]) {
+  for (const g of ((games ?? []) as unknown) as Game[]) {
     if (!roundMap[g.round_id]) {
       roundMap[g.round_id] = { round_number: g.rounds.round_number, games: [] }
     }
