@@ -421,6 +421,19 @@ export default async function AdminPage() {
           {resultRounds.length === 0 && <p>No fixtures loaded for this competition&apos;s season yet.</p>}
         </div>
       )}
+
+      {/* ── Competition Admin Links ── */}
+      <div className="section-card">
+        <div className="section-card-header">
+          <h2>Competition Admin</h2>
+        </div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <a href="/admin/closest-to-pin" className="btn btn-primary">🎯 Closest to Pin</a>
+          <a href="/admin/knockout" className="btn btn-primary">⚡ Knockout</a>
+          <a href="/admin/long-haul" className="btn btn-primary">🏁 Long Haul</a>
+          <a href="/admin/margin" className="btn btn-primary">📐 Margin Tipping</a>
+        </div>
+      </div>
     </main>
   )
 }
