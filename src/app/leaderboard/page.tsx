@@ -14,8 +14,8 @@ export default async function LeaderboardPage() {
 
   if (!competition) {
     return (
-      <main style={{ maxWidth: 800, margin: '40px auto', padding: '0 16px' }}>
-        <h1>Leaderboard</h1>
+      <main className="page-container">
+        <h1>🏆 Leaderboard</h1>
         <p>No active competition found.</p>
         <p><a href="/dashboard">Back to dashboard</a></p>
       </main>
@@ -59,44 +59,52 @@ export default async function LeaderboardPage() {
 
   const rows = Object.values(scoreMap).sort((a, b) => b.correct - a.correct || b.points - a.points)
 
+  const medals = ['🥇', '🥈', '🥉']
+
   return (
-    <main style={{ maxWidth: 800, margin: '40px auto', padding: '0 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>Leaderboard</h1>
-        <a href="/dashboard">← Dashboard</a>
+    <main className="page-container">
+      <div className="page-header">
+        <h1>🏆 Leaderboard</h1>
+        <a href="/dashboard" className="btn btn-primary btn-sm">← Dashboard</a>
       </div>
-      <h2 style={{ color: '#555', fontWeight: 'normal' }}>{competition.name}</h2>
+      <p style={{ marginBottom: 20, color: 'var(--text-muted)' }}>{competition.name}</p>
+
       {rows.length === 0 ? (
-        <p>No results yet — check back after Round 1!</p>
+        <div className="card"><p>No results yet — check back after Round 1!</p></div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 16 }}>
-          <thead>
-            <tr style={{ borderBottom: '2px solid #ccc', textAlign: 'left' }}>
-              <th style={{ padding: '8px 4px' }}>#</th>
-              <th style={{ padding: '8px 4px' }}>Name</th>
-              <th style={{ padding: '8px 4px', textAlign: 'center' }}>Correct</th>
-              <th style={{ padding: '8px 4px', textAlign: 'center' }}>Tipped</th>
-              <th style={{ padding: '8px 4px', textAlign: 'center' }}>%</th>
-              <th style={{ padding: '8px 4px', textAlign: 'center' }}>Pts</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={row.profile_id} style={{
-                borderBottom: '1px solid #eee',
-                background: row.profile_id === user.id ? '#fffbe6' : 'transparent',
-                fontWeight: row.profile_id === user.id ? 'bold' : 'normal',
-              }}>
-                <td style={{ padding: '8px 4px' }}>{i + 1}</td>
-                <td style={{ padding: '8px 4px' }}>{row.name}{row.profile_id === user.id ? ' (you)' : ''}</td>
-                <td style={{ padding: '8px 4px', textAlign: 'center' }}>{row.correct}</td>
-                <td style={{ padding: '8px 4px', textAlign: 'center' }}>{row.total}</td>
-                <td style={{ padding: '8px 4px', textAlign: 'center' }}>{row.total > 0 ? Math.round((row.correct / row.total) * 100) + '%' : '-'}</td>
-                <td style={{ padding: '8px 4px', textAlign: 'center' }}>{row.points}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="section-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="table-wrap">
+            <table className="afl-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th className="center">Correct</th>
+                  <th className="center">Tipped</th>
+                  <th className="center">%</th>
+                  <th className="center">Pts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => {
+                  const rankClass = i < 3 ? `rank-${i + 1}` : ''
+                  const isMe = row.profile_id === user.id
+                  const rowClass = [rankClass, isMe ? 'current-user' : ''].filter(Boolean).join(' ')
+                  return (
+                    <tr key={row.profile_id} className={rowClass}>
+                      <td>{medals[i] ?? (i + 1)}</td>
+                      <td>{row.name}{isMe ? ' (you)' : ''}</td>
+                      <td className="center">{row.correct}</td>
+                      <td className="center">{row.total}</td>
+                      <td className="center">{row.total > 0 ? Math.round((row.correct / row.total) * 100) + '%' : '—'}</td>
+                      <td className="center">{row.points}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </main>
   )

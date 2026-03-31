@@ -14,8 +14,8 @@ export default async function TipsPage() {
 
   if (!competition) {
     return (
-      <main style={{ maxWidth: 800, margin: '40px auto', padding: '0 16px' }}>
-        <h1>Submit Tips</h1>
+      <main className="page-container">
+        <h1>🏉 Submit Tips</h1>
         <p>No active competition found.</p>
         <p><a href="/dashboard">← Back to dashboard</a></p>
       </main>
@@ -71,21 +71,21 @@ export default async function TipsPage() {
     .sort((a, b) => a.round_number - b.round_number)
 
   return (
-    <main style={{ maxWidth: 800, margin: '40px auto', padding: '0 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>Submit Tips</h1>
-        <a href="/dashboard">← Dashboard</a>
+    <main className="page-container">
+      <div className="page-header">
+        <h1>🏉 Submit Tips</h1>
+        <a href="/dashboard" className="btn btn-primary btn-sm">← Dashboard</a>
       </div>
-      <h2 style={{ color: '#555', fontWeight: 'normal' }}>{competition.name}</h2>
+      <p style={{ marginBottom: 28, color: 'var(--text-muted)' }}>{competition.name}</p>
 
       <form action="/api/tips/submit" method="POST">
         <input type="hidden" name="competition_id" value={competition.id} />
 
         {rounds.map(({ round_id, round_number, games: roundGames }) => (
-          <section key={round_id} style={{ marginBottom: 40 }}>
-            <h3 style={{ borderBottom: '2px solid #ddd', paddingBottom: 8 }}>
-              Round {round_number}
-            </h3>
+          <section key={round_id} style={{ marginBottom: 36 }}>
+            <div className="round-header">
+              <span>Round {round_number}</span>
+            </div>
             {roundGames.map((game) => {
               const locked = new Date(game.match_time) <= new Date(now)
               const existingPick = tipMap[game.id]
@@ -95,47 +95,40 @@ export default async function TipsPage() {
               })
 
               return (
-                <div key={game.id} style={{
-                  border: '1px solid #eee',
-                  borderRadius: 8,
-                  padding: '12px 16px',
-                  marginBottom: 12,
-                  background: locked ? '#fafafa' : '#fff',
-                  opacity: locked ? 0.75 : 1,
-                }}>
-                  <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
-                    {matchDate}{game.venue ? ` · ${game.venue}` : ''}
-                    {locked && <span style={{ marginLeft: 8, color: '#c00', fontWeight: 'bold' }}>LOCKED</span>}
+                <div key={game.id} className={`game-card${locked ? ' locked' : ''}`}>
+                  <div className="game-meta">
+                    <span>{matchDate}{game.venue ? ` · ${game.venue}` : ''}</span>
+                    {locked && <span className="badge-locked">LOCKED</span>}
+                    {existingPick && !locked && <span className="badge-tipped">✓ tipped</span>}
                   </div>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: locked ? 'default' : 'pointer' }}>
+                  <div className="team-selector">
+                    <div className="team-btn">
                       <input
                         type="radio"
+                        id={`game_${game.id}_home`}
                         name={`tip_${game.id}`}
                         value={game.home_team.id}
                         defaultChecked={existingPick === game.home_team.id}
                         disabled={locked}
                       />
-                      <span style={{ fontWeight: 'bold' }}>
+                      <label htmlFor={`game_${game.id}_home`}>
                         {game.home_team.short_name ?? game.home_team.name}
-                      </span>
-                    </label>
-                    <span style={{ color: '#999' }}>vs</span>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: locked ? 'default' : 'pointer' }}>
+                      </label>
+                    </div>
+                    <span className="vs-divider">vs</span>
+                    <div className="team-btn">
                       <input
                         type="radio"
+                        id={`game_${game.id}_away`}
                         name={`tip_${game.id}`}
                         value={game.away_team.id}
                         defaultChecked={existingPick === game.away_team.id}
                         disabled={locked}
                       />
-                      <span style={{ fontWeight: 'bold' }}>
+                      <label htmlFor={`game_${game.id}_away`}>
                         {game.away_team.short_name ?? game.away_team.name}
-                      </span>
-                    </label>
-                    {existingPick && (
-                      <span style={{ marginLeft: 'auto', fontSize: 12, color: '#4a4' }}>✓ tipped</span>
-                    )}
+                      </label>
+                    </div>
                   </div>
                 </div>
               )
@@ -144,18 +137,12 @@ export default async function TipsPage() {
         ))}
 
         {rounds.length === 0 && (
-          <p>No fixtures loaded yet — check back soon!</p>
+          <div className="card"><p>No fixtures loaded yet — check back soon!</p></div>
         )}
 
-        <div style={{ marginTop: 24 }}>
-          <button
-            type="submit"
-            style={{
-              background: '#1a73e8', color: '#fff', border: 'none',
-              padding: '12px 32px', borderRadius: 6, fontSize: 16, cursor: 'pointer'
-            }}
-          >
-            Save Tips
+        <div style={{ marginTop: 28 }}>
+          <button type="submit" className="btn btn-gold" style={{ padding: '12px 40px', fontSize: '1rem' }}>
+            💾 Save Tips
           </button>
         </div>
       </form>
