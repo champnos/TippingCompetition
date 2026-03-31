@@ -38,6 +38,26 @@ export default async function DashboardPage() {
           <span className="nav-card-title">Margin Tipping</span>
           <span className="nav-card-desc">Tip the winner and earn points by margin.</span>
         </a>
+        <a href="/knockout" className="nav-card">
+          <span className="nav-card-icon">🥊</span>
+          <span className="nav-card-title">Knockout</span>
+          <span className="nav-card-desc">Tip your team to survive each round.</span>
+        </a>
+        <a href="/closest-to-pin" className="nav-card">
+          <span className="nav-card-icon">🎯</span>
+          <span className="nav-card-title">Closest to Pin</span>
+          <span className="nav-card-desc">Tip the winner and margin each round.</span>
+        </a>
+        <a href="/long-haul" className="nav-card">
+          <span className="nav-card-icon">🏁</span>
+          <span className="nav-card-title">Long Haul</span>
+          <span className="nav-card-desc">Pick 8 teams to win across the season.</span>
+        </a>
+        <a href="/precision" className="nav-card">
+          <span className="nav-card-icon">🎯</span>
+          <span className="nav-card-title">Precision</span>
+          <span className="nav-card-desc">One team. Survive every round.</span>
+        </a>
         <a href="/finals" className="nav-card">
           <span className="nav-card-icon">🏆</span>
           <span className="nav-card-title">Finals Tipping</span>
