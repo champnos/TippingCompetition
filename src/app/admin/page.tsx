@@ -432,6 +432,17 @@ export default async function AdminPage() {
           <a href="/admin/knockout" className="btn btn-primary">⚡ Knockout</a>
           <a href="/admin/long-haul" className="btn btn-primary">🏁 Long Haul</a>
           <a href="/admin/margin" className="btn btn-primary">📐 Margin Tipping</a>
+          <a href="/admin/precision" className="btn btn-primary">🎯 Precision</a>
+        </div>
+      </div>
+
+      {/* ── Team Management ── */}
+      <div className="section-card">
+        <div className="section-card-header">
+          <h2>Team Management</h2>
+        </div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <a href="/admin/teams" className="btn btn-primary">🏈 Manage Teams</a>
         </div>
       </div>
     </main>
