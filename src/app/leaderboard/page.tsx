@@ -38,7 +38,7 @@ export default async function LeaderboardPage() {
 
   if (entries) {
     for (const entry of entries) {
-      const profile = entry.profiles as { full_name: string | null; short_name: string | null } | null
+      const profile = (entry.profiles as unknown) as { full_name: string | null; short_name: string | null } | null
       scoreMap[entry.profile_id] = {
         profile_id: entry.profile_id,
         name: profile?.short_name || profile?.full_name || 'Unknown',
