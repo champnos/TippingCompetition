@@ -27,27 +27,52 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ maxWidth: 400, margin: '80px auto', padding: '0 16px' }}>
-      <h1>Mancini Tipping</h1>
-      <h2>Log In</h2>
-      <form onSubmit={handleLogin}>
-        <div style={{ marginBottom: 12 }}>
-          <label>Email<br />
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required style={{ width: '100%', padding: 8, marginTop: 4 }} />
-          </label>
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-brand">
+          <span className="emoji">🏉</span>
+          <h1>Mancini Tipping</h1>
+          <p>AFL Tipping Competition</p>
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <label>Password<br />
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required style={{ width: '100%', padding: 8, marginTop: 4 }} />
-          </label>
+
+        <form onSubmit={handleLogin} className="login-form">
+          <div className="form-field">
+            <label className="form-label" htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              className="form-input"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              placeholder="you@example.com"
+              autoComplete="email"
+            />
+          </div>
+          <div className="form-field">
+            <label className="form-label" htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              className="form-input"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              placeholder="••••••••"
+              autoComplete="current-password"
+            />
+          </div>
+          {error && <div className="alert-error">{error}</div>}
+          <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: '100%', marginTop: 4, padding: '12px' }}>
+            {loading ? 'Logging in…' : 'Log In'}
+          </button>
+        </form>
+
+        <div className="login-footer">
+          <p>No account? <a href="/signup">Sign up</a></p>
+          <p style={{ marginTop: 6 }}><a href="/forgot-password">Forgot password?</a></p>
         </div>
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-        <button type="submit" disabled={loading} style={{ width: '100%', padding: 10 }}>
-          {loading ? 'Logging in...' : 'Log In'}
-        </button>
-      </form>
-      <p style={{ marginTop: 16 }}>No account? <a href="/signup">Sign up</a></p>
-      <p><a href="/forgot-password">Forgot password?</a></p>
-    </main>
+      </div>
+    </div>
   )
 }
