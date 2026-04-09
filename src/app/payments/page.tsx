@@ -75,42 +75,42 @@ export default async function PaymentsPage() {
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Margin',
-      name: (e.competitions as { name: string } | null)?.name ?? '—',
+      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
       status: 'Active',
     })),
     ...(knockoutEntries ?? []).map((e) => ({
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Knockout',
-      name: (e.competitions as { name: string } | null)?.name ?? '—',
+      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
       status: e.is_active ? 'Active' : 'Eliminated',
     })),
     ...(precisionEntries ?? []).map((e) => ({
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Precision',
-      name: (e.competitions as { name: string } | null)?.name ?? '—',
+      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
       status: e.is_active ? 'Active' : 'Eliminated',
     })),
     ...(closestToPinEntries ?? []).map((e) => ({
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Closest to Pin',
-      name: (e.competitions as { name: string } | null)?.name ?? '—',
+      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
       status: 'Active',
     })),
     ...(longHaulEntries ?? []).map((e) => ({
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Long Haul',
-      name: (e.competitions as { name: string } | null)?.name ?? '—',
+      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
       status: 'Active',
     })),
     ...(finalsEntries ?? []).map((e) => ({
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Finals',
-      name: (e.competitions as { name: string } | null)?.name ?? '—',
+      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
       status: e.is_active ? 'Active' : 'Eliminated',
     })),
   ]
@@ -273,5 +273,4 @@ export default async function PaymentsPage() {
         </form>
       </div>
     </main>
-  )
 }
