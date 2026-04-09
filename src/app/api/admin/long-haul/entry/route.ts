@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { insertEntryFeeTransaction } from '@/lib/transactions'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
@@ -37,35 +38,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Auto-debit entry fee
-  try {
-    const { data: comp } = await supabase
-      .from('competitions')
-      .select('entry_fee, name')
-      .eq('id', competition_id)
-      .single()
-
-    if (comp && Number(comp.entry_fee) > 0) {
-      const { data: txType } = await supabase
-        .from('transaction_types')
-        .select('id')
-        .eq('name', 'Entry Fee')
-        .single()
-
-      if (txType) {
-        const { error: txError } = await supabase.from('transactions').insert({
-          profile_id: user_id,
-          competition_id,
-          type_id: txType.id,
-          amount: -Number(comp.entry_fee),
-          notes: `Entry fee — ${comp.name}`,
-          created_by: user.id,
-        })
-        if (txError) console.error('Entry fee transaction error:', txError)
-      }
-    }
-  } catch (txErr) {
-    console.error('Entry fee transaction error:', txErr)
-  }
+  await insertEntryFeeTransaction(supabase, { user_id, competition_id, created_by: user.id })
 
   return NextResponse.redirect(new URL('/admin/long-haul', req.url))
 }
