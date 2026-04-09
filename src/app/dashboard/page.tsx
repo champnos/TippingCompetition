@@ -28,6 +28,11 @@ export default async function DashboardPage() {
           <span className="nav-card-title">Leaderboard</span>
           <span className="nav-card-desc">See how you stack up against the comp.</span>
         </a>
+        <a href="/results" className="nav-card">
+          <span className="nav-card-icon">📋</span>
+          <span className="nav-card-title">Results</span>
+          <span className="nav-card-desc">View weekly match results and scores.</span>
+        </a>
         <a href="/margin" className="nav-card">
           <span className="nav-card-icon">📐</span>
           <span className="nav-card-title">Margin Tipping</span>
