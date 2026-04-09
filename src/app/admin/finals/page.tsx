@@ -17,6 +17,17 @@ type FinalsWeek = {
   locked: boolean
 }
 
+type FinalsGame = {
+  id: number
+  match_time: string | null
+  venue: string | null
+  home_score: number | null
+  away_score: number | null
+  home_team: { id: number; name: string; short_name: string | null } | null
+  away_team: { id: number; name: string; short_name: string | null } | null
+  rounds: { round_number: number } | null
+}
+
 const WEEK_NAMES: Record<number, string> = {
   1: 'Week 1 — Qualifying/Elimination Finals',
   2: 'Week 2 — Semi Finals',
@@ -32,6 +43,8 @@ export default async function AdminFinalsPage({
     processed?: string
     locked?: string
     info?: string
+    game_added?: string
+    score_saved?: string
   }
 }) {
   const supabase = createClient()
@@ -68,9 +81,10 @@ export default async function AdminFinalsPage({
 
   let entries: FinalsEntry[] = []
   let weekLocks: FinalsWeek[] = []
+  let finalsGames: FinalsGame[] = []
 
   if (competition) {
-    const [{ data: entriesData }, { data: weeksData }] = await Promise.all([
+    const [{ data: entriesData }, { data: weeksData }, { data: gamesData }] = await Promise.all([
       supabase
         .from('finals_entries')
         .select(`
@@ -83,10 +97,23 @@ export default async function AdminFinalsPage({
         .from('finals_weeks')
         .select('finals_week, locked')
         .eq('competition_id', competition.id),
+      supabase
+        .from('games')
+        .select(`
+          id, match_time, venue, home_score, away_score,
+          home_team:teams!games_home_team_id_fkey(id, name, short_name),
+          away_team:teams!games_away_team_id_fkey(id, name, short_name),
+          rounds!inner(round_number, season_id)
+        `)
+        .eq('is_final', true)
+        .eq('rounds.season_id', competition.season_id)
+        .in('rounds.round_number', [100, 101, 102, 103])
+        .order('match_time', { ascending: true }),
     ])
 
     entries = (entriesData ?? []) as unknown as FinalsEntry[]
     weekLocks = (weeksData ?? []) as FinalsWeek[]
+    finalsGames = (gamesData ?? []) as unknown as FinalsGame[]
   }
 
   const lockedWeeks = new Set(weekLocks.filter((w) => w.locked).map((w) => w.finals_week))
@@ -105,11 +132,15 @@ export default async function AdminFinalsPage({
     ? searchParams.error === 'missing_fields' ? 'Please fill in all required fields.'
     : searchParams.error === 'entry_save_failed' ? 'Failed to add entrant. They may already be enrolled.'
     : searchParams.error === 'lock_failed' ? 'Failed to lock the week. Please try again.'
+    : searchParams.error === 'game_failed' ? 'Failed to add game. Please try again.'
+    : searchParams.error === 'score_failed' ? 'Failed to save score. Please try again.'
     : `Error: ${searchParams.error}`
     : null
 
   const processedMsg = searchParams.processed ? 'Week results processed successfully.' : null
   const lockedMsg = searchParams.locked ? 'Finals week locked successfully.' : null
+  const gameAddedMsg = searchParams.game_added ? 'Game added successfully.' : null
+  const scoreSavedMsg = searchParams.score_saved ? 'Score saved successfully.' : null
   const infoMsg = searchParams.info === 'no_active_entries'
     ? 'No active entries found for this competition.'
     : null
@@ -132,6 +163,16 @@ export default async function AdminFinalsPage({
           {lockedMsg}
         </div>
       )}
+      {gameAddedMsg && (
+        <div style={{ background: '#f0fff4', border: '1px solid #bbf7d0', color: 'var(--success)', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
+          {gameAddedMsg}
+        </div>
+      )}
+      {scoreSavedMsg && (
+        <div style={{ background: '#f0fff4', border: '1px solid #bbf7d0', color: 'var(--success)', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
+          {scoreSavedMsg}
+        </div>
+      )}
       {infoMsg && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
           {infoMsg}
@@ -141,6 +182,141 @@ export default async function AdminFinalsPage({
       {!competition && (
         <div className="section-card">
           <p>No active Finals competition found. Create a competition with &ldquo;Finals&rdquo; (case-insensitive) in its name and set it as active.</p>
+        </div>
+      )}
+
+      {/* ── Finals Fixtures ── */}
+      {competition && (
+        <div className="section-card">
+          <div className="section-card-header">
+            <h2>Finals Fixtures</h2>
+          </div>
+
+          {finalsGames.length > 0 ? (
+            <div className="table-wrap" style={{ marginBottom: 20 }}>
+              <table className="afl-table">
+                <thead>
+                  <tr>
+                    <th>Week</th>
+                    <th>Home Team</th>
+                    <th>Away Team</th>
+                    <th>Date</th>
+                    <th>Venue</th>
+                    <th className="center">Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {finalsGames.map((g) => {
+                    const week = g.rounds ? g.rounds.round_number - 99 : null
+                    const result =
+                      g.home_score !== null && g.away_score !== null
+                        ? `${g.home_score} – ${g.away_score}`
+                        : 'TBC'
+                    return (
+                      <tr key={g.id}>
+                        <td>{week ? WEEK_NAMES[week] : '—'}</td>
+                        <td>{g.home_team?.name ?? '—'}</td>
+                        <td>{g.away_team?.name ?? '—'}</td>
+                        <td>{g.match_time ? new Date(g.match_time).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
+                        <td>{g.venue ?? '—'}</td>
+                        <td className="center">{result}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p style={{ marginBottom: 16 }}>No finals games added yet.</p>
+          )}
+
+          <h3 style={{ marginBottom: 14 }}>Add Finals Game</h3>
+          <form action="/api/admin/finals/game" method="POST">
+            <input type="hidden" name="competition_id" value={competition.id} />
+            <div className="form-grid">
+              <div className="form-field">
+                <label className="form-label">Finals Week</label>
+                <select name="finals_week" required className="form-select">
+                  <option value="">Select week…</option>
+                  {[1, 2, 3, 4].map((w) => (
+                    <option key={w} value={w}>{WEEK_NAMES[w]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Home Team</label>
+                <select name="home_team_id" required className="form-select">
+                  <option value="">Select team…</option>
+                  {allTeams.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Away Team</label>
+                <select name="away_team_id" required className="form-select">
+                  <option value="">Select team…</option>
+                  {allTeams.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Match Date/Time</label>
+                <input type="datetime-local" name="match_time" required className="form-input" />
+              </div>
+              <div className="form-field">
+                <label className="form-label">Venue (optional)</label>
+                <input type="text" name="venue" placeholder="e.g. MCG" className="form-input" />
+              </div>
+              <div className="form-field" style={{ justifyContent: 'flex-end' }}>
+                <button type="submit" className="btn btn-primary">Add Game</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── Enter Scores ── */}
+      {competition && (
+        <div className="section-card">
+          <div className="section-card-header">
+            <h2>Enter Scores</h2>
+          </div>
+          {finalsGames.filter((g) => g.home_score === null).length === 0 ? (
+            <p>All games have been scored.</p>
+          ) : (
+            finalsGames
+              .filter((g) => g.home_score === null)
+              .map((g) => {
+                const week = g.rounds ? g.rounds.round_number - 99 : null
+                return (
+                  <div key={g.id} style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--border)' }}>
+                    <p style={{ fontWeight: 600, marginBottom: 10 }}>
+                      {week ? WEEK_NAMES[week] : '—'} — {g.home_team?.name ?? '?'} vs {g.away_team?.name ?? '?'}
+                    </p>
+                    <form action="/api/admin/finals/score" method="POST">
+                      <input type="hidden" name="game_id" value={g.id} />
+                      <input type="hidden" name="home_team_id" value={g.home_team?.id ?? ''} />
+                      <input type="hidden" name="away_team_id" value={g.away_team?.id ?? ''} />
+                      <div className="form-grid">
+                        <div className="form-field">
+                          <label className="form-label">{g.home_team?.name ?? 'Home'} Score</label>
+                          <input type="number" name="home_score" required min={0} className="form-input" />
+                        </div>
+                        <div className="form-field">
+                          <label className="form-label">{g.away_team?.name ?? 'Away'} Score</label>
+                          <input type="number" name="away_score" required min={0} className="form-input" />
+                        </div>
+                        <div className="form-field" style={{ justifyContent: 'flex-end' }}>
+                          <button type="submit" className="btn btn-gold btn-sm">Save Score</button>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                )
+              })
+          )}
         </div>
       )}
 

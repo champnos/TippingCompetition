@@ -30,6 +30,18 @@ type FinalsWeek = {
   locked: boolean
 }
 
+type FinalsGame = {
+  id: number
+  match_time: string | null
+  venue: string | null
+  home_score: number | null
+  away_score: number | null
+  home_team: { id: number; name: string; short_name: string | null } | null
+  away_team: { id: number; name: string; short_name: string | null } | null
+  rounds: { round_number: number } | null
+  finals_week?: number
+}
+
 const WEEK_NAMES: Record<number, string> = {
   1: 'Week 1 — Qualifying/Elimination Finals',
   2: 'Week 2 — Semi Finals',
@@ -103,6 +115,34 @@ export default async function FinalsPage({
   const weekLocks = (weeksData ?? []) as FinalsWeek[]
   const lockedWeeks = new Set(weekLocks.filter((w) => w.locked).map((w) => w.finals_week))
 
+  // Fetch finals games for this season
+  const { data: gamesData } = await supabase
+    .from('games')
+    .select(`
+      id, match_time, venue, home_score, away_score,
+      home_team:teams!games_home_team_id_fkey(id, name, short_name),
+      away_team:teams!games_away_team_id_fkey(id, name, short_name),
+      rounds!inner(round_number, season_id)
+    `)
+    .eq('is_final', true)
+    .eq('rounds.season_id', competition.season_id)
+    .in('rounds.round_number', [100, 101, 102, 103])
+    .order('match_time', { ascending: true })
+
+  const finalsGames = ((gamesData ?? []) as unknown as FinalsGame[]).map((g) => ({
+    ...g,
+    finals_week: g.rounds ? g.rounds.round_number - 99 : undefined,
+  }))
+
+  // Group games by finals_week
+  const gamesByWeek: Record<number, FinalsGame[]> = {}
+  for (const game of finalsGames) {
+    if (game.finals_week !== undefined) {
+      if (!gamesByWeek[game.finals_week]) gamesByWeek[game.finals_week] = []
+      gamesByWeek[game.finals_week].push(game)
+    }
+  }
+
   // Determine current finals week (lowest week 1–4 that is not locked AND results not yet processed)
   // "Current week" = first week where tips haven't been processed (no error_score set for active entries)
   // Simpler: first unlocked week from 1–4
@@ -136,6 +176,15 @@ export default async function FinalsPage({
     : null
 
   const canTip = !!entry && entry.is_active && currentWeek !== null && !lockedWeeks.has(currentWeek)
+
+  // Filter teams for the current week's games (fallback to all teams if no games added yet)
+  const currentWeekGames = currentWeek ? (gamesByWeek[currentWeek] ?? []) : []
+  const finalsTeamIds = new Set(
+    currentWeekGames.flatMap((g) => [g.home_team?.id, g.away_team?.id].filter(Boolean) as number[])
+  )
+  const tipTeams = finalsTeamIds.size > 0
+    ? allTeams.filter((t) => finalsTeamIds.has(t.id))
+    : allTeams
 
   // Build leaderboard
   type EntryWithProfile = {
@@ -224,6 +273,67 @@ export default async function FinalsPage({
         </div>
       )}
 
+      {/* ── Finals Schedule & Results ── */}
+      {finalsGames.length > 0 && (
+        <div className="section-card">
+          <div className="section-card-header">
+            <h2>Finals Schedule &amp; Results</h2>
+          </div>
+          {[1, 2, 3, 4].map((week) => {
+            const games = gamesByWeek[week]
+            if (!games || games.length === 0) return null
+            const tip = tipHistory.find((t) => t.finals_week === week)
+            return (
+              <div key={week} style={{ marginBottom: 24 }}>
+                <h3 style={{ marginBottom: 10, fontSize: '1rem', fontWeight: 700 }}>{WEEK_NAMES[week]}</h3>
+                <div className="table-wrap">
+                  <table className="afl-table">
+                    <thead>
+                      <tr>
+                        <th>Home</th>
+                        <th>Away</th>
+                        <th>Date</th>
+                        <th className="center">Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {games.map((g) => {
+                        const hasResult = g.home_score !== null && g.away_score !== null
+                        return (
+                          <tr key={g.id}>
+                            <td>{g.home_team?.short_name ?? g.home_team?.name ?? '—'}</td>
+                            <td>{g.away_team?.short_name ?? g.away_team?.name ?? '—'}</td>
+                            <td>{g.match_time ? new Date(g.match_time).toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
+                            <td className="center">
+                              {hasResult
+                                ? `${g.home_score} – ${g.away_score}`
+                                : <span style={{ color: 'var(--text-muted)' }}>Upcoming</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {tip && lockedWeeks.has(week) && (
+                  <div style={{ marginTop: 10, padding: '8px 12px', background: '#f8fafc', borderRadius: 6, border: '1px solid var(--border)', fontSize: '0.9rem' }}>
+                    <strong>Your tip:</strong>{' '}
+                    {tip.team?.short_name ?? tip.team?.name ?? '—'} by {tip.margin} pts
+                    {tip.error_score !== null && (
+                      <span style={{ marginLeft: 12 }}>
+                        — Error: <strong>{tip.error_score === 9999 ? '⚠️ No tip' : tip.error_score}</strong>
+                        {tip.correct_team === true && <span style={{ marginLeft: 6, color: 'var(--success)' }}>✅ Correct team</span>}
+                        {tip.correct_team === false && <span style={{ marginLeft: 6, color: 'var(--danger)' }}>❌ Wrong team</span>}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* ── Tip Form ── */}
       {canTip && currentWeek !== null && (
         <div className="section-card">
@@ -252,7 +362,7 @@ export default async function FinalsPage({
                 <label className="form-label">Pick Your Team</label>
                 <select name="team_id" required className="form-select" defaultValue={currentTip?.team_id ?? ''}>
                   <option value="">Select a team…</option>
-                  {allTeams.map((t) => (
+                  {tipTeams.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}{t.short_name ? ` (${t.short_name})` : ''}
                     </option>
