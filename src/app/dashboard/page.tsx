@@ -28,6 +28,11 @@ export default async function DashboardPage() {
           <span className="nav-card-title">Leaderboard</span>
           <span className="nav-card-desc">See how you stack up against the comp.</span>
         </a>
+        <a href="/ladder" className="nav-card">
+          <span className="nav-card-icon">📊</span>
+          <span className="nav-card-title">AFL Ladder</span>
+          <span className="nav-card-desc">See the live AFL season ladder standings.</span>
+        </a>
         <a href="/results" className="nav-card">
           <span className="nav-card-icon">📋</span>
           <span className="nav-card-title">Results</span>
