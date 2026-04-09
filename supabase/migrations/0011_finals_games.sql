@@ -1,0 +1,8 @@
+-- Finals games use is_final = true on the games table.
+-- Finals rounds use round_number 100-103 (week 1-4) within the active season.
+-- This avoids schema changes while keeping finals games queryable.
+-- Week to round_number mapping:
+--   Finals Week 1 → round_number 100
+--   Finals Week 2 → round_number 101
+--   Finals Week 3 → round_number 102
+--   Finals Week 4 → round_number 103
