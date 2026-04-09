@@ -515,6 +515,7 @@ export default async function AdminPage({
           <a href="/admin/margin" className="btn btn-primary">📐 Margin Tipping</a>
           <a href="/admin/precision" className="btn btn-primary">🎯 Precision</a>
           <a href="/admin/finals" className="btn btn-primary">🏆 Finals</a>
+          <a href="/admin/payments" className="btn btn-primary">💰 Payments</a>
         </div>
       </div>
 

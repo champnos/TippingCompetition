@@ -38,6 +38,37 @@ export async function POST(req: NextRequest) {
       console.error('New entry error:', error)
       return NextResponse.redirect(new URL('/admin/knockout?error=entry_save_failed', req.url))
     }
+
+    // Auto-debit entry fee for new entries
+    try {
+      const { data: comp } = await supabase
+        .from('competitions')
+        .select('entry_fee, name')
+        .eq('id', competition_id)
+        .single()
+
+      if (comp && Number(comp.entry_fee) > 0) {
+        const { data: txType } = await supabase
+          .from('transaction_types')
+          .select('id')
+          .eq('name', 'Entry Fee')
+          .single()
+
+        if (txType) {
+          const { error: txError } = await supabase.from('transactions').insert({
+            profile_id: user_id,
+            competition_id,
+            type_id: txType.id,
+            amount: -Number(comp.entry_fee),
+            notes: `Entry fee — ${comp.name}`,
+            created_by: user.id,
+          })
+          if (txError) console.error('Entry fee transaction error:', txError)
+        }
+      }
+    } catch (txErr) {
+      console.error('Entry fee transaction error:', txErr)
+    }
   } else if (action === 'buyin') {
     // Get the existing entry
     const { data: existingEntry } = await supabase
