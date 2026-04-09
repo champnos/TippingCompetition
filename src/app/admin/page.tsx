@@ -1,7 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: { imported?: string; skipped?: string; skip_reasons?: string; error?: string }
+}) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -217,6 +221,40 @@ export default async function AdminPage() {
             </div>
             <div className="form-field" style={{ justifyContent: 'flex-end' }}>
               <button type="submit" className="btn btn-primary">Add Round</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      {/* ── Import Fixtures (CSV) ── */}
+      <div className="section-card">
+        <div className="section-card-header">
+          <h2>Import Fixtures (CSV)</h2>
+        </div>
+        {searchParams.imported !== undefined && (
+          <div style={{ background: '#f0fff4', border: '1px solid #bbf7d0', color: 'var(--success)', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
+            ✅ {searchParams.imported} fixture(s) imported successfully.
+          </div>
+        )}
+        {searchParams.skipped !== undefined && Number(searchParams.skipped) > 0 && (
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
+            ⚠️ {searchParams.skipped} row(s) skipped{searchParams.skip_reasons ? `: ${searchParams.skip_reasons}` : ''}.
+          </div>
+        )}
+        <p style={{ marginBottom: 12, fontSize: '0.9rem', color: '#555' }}>
+          Upload a CSV file to bulk-import fixtures. Format: <code>round_id,home_team,away_team,match_time,venue</code>
+          <br />
+          Teams matched by name or short_name (case-insensitive). <code>match_time</code> in ISO format (e.g. <code>2026-04-12T14:35</code>). <code>venue</code> is optional.
+        </p>
+        <form action="/api/admin/game/import" method="POST" encType="multipart/form-data">
+          <div className="form-grid">
+            <div className="form-field">
+              <label className="form-label">CSV File</label>
+              <input type="file" name="csv_file" accept=".csv" required className="form-input" />
+            </div>
+            <div className="form-field" style={{ justifyContent: 'flex-end', gap: 10, display: 'flex', alignItems: 'flex-end' }}>
+              <a href="/api/admin/game/import" download="fixtures_template.csv" className="btn btn-sm btn-primary">Download CSV Template</a>
+              <button type="submit" className="btn btn-gold">Import Fixtures</button>
             </div>
           </div>
         </form>
