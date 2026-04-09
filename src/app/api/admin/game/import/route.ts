@@ -141,7 +141,9 @@ export async function POST(req: NextRequest) {
     if (!error) {
       imported = toInsert.length
     } else {
-      skipReasons.push(`Insert error: ${error.message}`)
+      for (let i = 0; i < toInsert.length; i++) {
+        skipReasons.push(`Valid row #${i + 1}: insert failed — ${error.message}`)
+      }
     }
   }
 
