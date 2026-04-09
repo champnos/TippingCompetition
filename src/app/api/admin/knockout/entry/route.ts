@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { insertEntryFeeTransaction } from '@/lib/transactions'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
@@ -38,6 +39,9 @@ export async function POST(req: NextRequest) {
       console.error('New entry error:', error)
       return NextResponse.redirect(new URL('/admin/knockout?error=entry_save_failed', req.url))
     }
+
+    // Auto-debit entry fee for new entries
+    await insertEntryFeeTransaction(supabase, { user_id, competition_id, created_by: user.id })
   } else if (action === 'buyin') {
     // Get the existing entry
     const { data: existingEntry } = await supabase

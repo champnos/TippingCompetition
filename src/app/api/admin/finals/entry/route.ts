@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { insertEntryFeeTransaction } from '@/lib/transactions'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
@@ -35,6 +36,9 @@ export async function POST(req: NextRequest) {
     console.error('Finals entry error:', error)
     return NextResponse.redirect(new URL('/admin/finals?error=entry_save_failed', req.url))
   }
+
+  // Auto-debit entry fee
+  await insertEntryFeeTransaction(supabase, { user_id, competition_id, created_by: user.id })
 
   return NextResponse.redirect(new URL('/admin/finals', req.url))
 }
