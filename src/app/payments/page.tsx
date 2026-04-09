@@ -75,42 +75,42 @@ export default async function PaymentsPage() {
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Margin',
-      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
+      name: (e.competitions as unknown as { name: string }[] | null)?.[0]?.name ?? '—',
       status: 'Active',
     })),
     ...(knockoutEntries ?? []).map((e) => ({
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Knockout',
-      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
+      name: (e.competitions as unknown as { name: string }[] | null)?.[0]?.name ?? '—',
       status: e.is_active ? 'Active' : 'Eliminated',
     })),
     ...(precisionEntries ?? []).map((e) => ({
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Precision',
-      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
+      name: (e.competitions as unknown as { name: string }[] | null)?.[0]?.name ?? '—',
       status: e.is_active ? 'Active' : 'Eliminated',
     })),
     ...(closestToPinEntries ?? []).map((e) => ({
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Closest to Pin',
-      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
+      name: (e.competitions as unknown as { name: string }[] | null)?.[0]?.name ?? '—',
       status: 'Active',
     })),
     ...(longHaulEntries ?? []).map((e) => ({
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Long Haul',
-      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
+      name: (e.competitions as unknown as { name: string }[] | null)?.[0]?.name ?? '—',
       status: 'Active',
     })),
     ...(finalsEntries ?? []).map((e) => ({
       competition_id: e.competition_id,
       total_paid: Number(e.total_paid),
       type: 'Finals',
-      name: (e.competitions as { name: string }[] | null)?.[0]?.name ?? '—',
+      name: (e.competitions as unknown as { name: string }[] | null)?.[0]?.name ?? '—',
       status: e.is_active ? 'Active' : 'Eliminated',
     })),
   ]
@@ -155,7 +155,7 @@ export default async function PaymentsPage() {
                 <tr>
                   <th>Competition</th>
                   <th>Type</th>
-                  <th className="right">Total Paid</th>
+                  <th className="center">Total Paid</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -164,7 +164,7 @@ export default async function PaymentsPage() {
                   <tr key={i}>
                     <td>{e.name}</td>
                     <td>{e.type}</td>
-                    <td className="right">${e.total_paid.toFixed(2)}</td>
+                    <td className="center">${e.total_paid.toFixed(2)}</td>
                     <td>
                       <span style={{ color: e.status === 'Eliminated' ? '#c00' : 'var(--success)', fontWeight: 600 }}>
                         {e.status}
@@ -184,7 +184,7 @@ export default async function PaymentsPage() {
           <h2>Transaction History</h2>
         </div>
         {(transactions ?? []).length === 0 ? (
-          <p style={{ color: '#888' }}>No transactions yet.</p>
+          <p>No transactions yet.</p>
         ) : (
           <div className="table-wrap">
             <table className="afl-table">
@@ -193,21 +193,21 @@ export default async function PaymentsPage() {
                   <th>Date</th>
                   <th>Type</th>
                   <th>Notes</th>
-                  <th className="right">Amount</th>
+                  <th className="center">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {(transactions as unknown as Transaction[]).map((t) => (
                   <tr key={t.id}>
-                    <td style={{ fontSize: 13, color: '#555' }}>
+                    <td>
                       {new Date(t.created_at).toLocaleDateString('en-AU', {
                         day: 'numeric', month: 'short', year: 'numeric',
                       })}
                     </td>
-                    <td style={{ fontSize: 13 }}>{t.transaction_types?.name ?? '—'}</td>
-                    <td style={{ fontSize: 13, color: '#666' }}>{t.notes ?? '—'}</td>
+                    <td>{t.transaction_types?.name ?? '—'}</td>
+                    <td>{t.notes ?? '—'}</td>
                     <td
-                      className="right"
+                      className="center"
                       style={{ fontWeight: 'bold', color: Number(t.amount) >= 0 ? 'var(--success)' : '#c00' }}
                     >
                       {Number(t.amount) >= 0 ? '+' : ''}${Number(t.amount).toFixed(2)}
@@ -225,7 +225,7 @@ export default async function PaymentsPage() {
         <div className="section-card-header">
           <h2>Your Bank Details</h2>
         </div>
-        <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>
+        <p style={{ marginBottom: 16 }}>
           Provide your bank details so the organiser can pay out winnings.
         </p>
         <form action="/api/payments/bank" method="POST">
@@ -273,4 +273,5 @@ export default async function PaymentsPage() {
         </form>
       </div>
     </main>
+  )
 }
