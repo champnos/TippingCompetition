@@ -30,6 +30,9 @@ export default async function LadderPage() {
 
   let ladder: LadderEntry[] = []
 
+  const pct = (e: LadderEntry) => (e.PA === 0 ? Infinity : e.PF / e.PA)
+  const pctDisplay = (e: LadderEntry) => (e.PA === 0 ? '—' : ((e.PF / e.PA) * 100).toFixed(1) + '%')
+
   if (activeComp) {
     const { data: gamesData } = await supabase
       .from('games')
@@ -73,9 +76,7 @@ export default async function LadderPage() {
 
     ladder = Object.values(map).sort((a, b) => {
       if (b.Pts !== a.Pts) return b.Pts - a.Pts
-      const pctA = a.PA === 0 ? 0 : a.PF / a.PA
-      const pctB = b.PA === 0 ? 0 : b.PF / b.PA
-      return pctB - pctA
+      return pct(b) - pct(a)
     })
   }
 
@@ -111,7 +112,7 @@ export default async function LadderPage() {
               </thead>
               <tbody>
                 {ladder.map((entry, i) => {
-                  const pct = entry.PA === 0 ? '—' : ((entry.PF / entry.PA) * 100).toFixed(1) + '%'
+                  const display = pctDisplay(entry)
                   return (
                     <tr key={entry.teamId}>
                       <td>{i + 1}</td>
@@ -122,7 +123,7 @@ export default async function LadderPage() {
                       <td className="center">{entry.D}</td>
                       <td className="center">{entry.PF}</td>
                       <td className="center">{entry.PA}</td>
-                      <td className="center">{pct}</td>
+                      <td className="center">{display}</td>
                       <td className="center">{entry.Pts}</td>
                     </tr>
                   )
