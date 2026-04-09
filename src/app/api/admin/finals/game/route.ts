@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   const match_time = formData.get('match_time') as string
   const venue = (formData.get('venue') as string) || null
 
-  if (!competition_id || !finals_week || !home_team_id || !away_team_id || !match_time) {
+  if (!competition_id || isNaN(competition_id) || !finals_week || isNaN(finals_week) || !home_team_id || isNaN(home_team_id) || !away_team_id || isNaN(away_team_id) || !match_time) {
     return NextResponse.redirect(new URL('/admin/finals?error=missing_fields', req.url))
   }
 

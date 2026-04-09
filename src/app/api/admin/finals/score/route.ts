@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   const home_team_id = Number(formData.get('home_team_id'))
   const away_team_id = Number(formData.get('away_team_id'))
 
-  if (!game_id || isNaN(home_score) || isNaN(away_score) || !home_team_id || !away_team_id) {
+  if (!game_id || isNaN(game_id) || isNaN(home_score) || isNaN(away_score) || !home_team_id || isNaN(home_team_id) || !away_team_id || isNaN(away_team_id)) {
     return NextResponse.redirect(new URL('/admin/finals?error=missing_fields', req.url))
   }
 

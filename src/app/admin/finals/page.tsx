@@ -301,12 +301,12 @@ export default async function AdminFinalsPage({
                       <input type="hidden" name="away_team_id" value={g.away_team?.id ?? ''} />
                       <div className="form-grid">
                         <div className="form-field">
-                          <label className="form-label">{g.home_team?.name ?? 'Home'} Score</label>
-                          <input type="number" name="home_score" required min={0} className="form-input" />
+                          <label htmlFor={`home_score_${g.id}`} className="form-label">{g.home_team?.name ?? 'Home'} Score</label>
+                          <input id={`home_score_${g.id}`} type="number" name="home_score" required min={0} className="form-input" />
                         </div>
                         <div className="form-field">
-                          <label className="form-label">{g.away_team?.name ?? 'Away'} Score</label>
-                          <input type="number" name="away_score" required min={0} className="form-input" />
+                          <label htmlFor={`away_score_${g.id}`} className="form-label">{g.away_team?.name ?? 'Away'} Score</label>
+                          <input id={`away_score_${g.id}`} type="number" name="away_score" required min={0} className="form-input" />
                         </div>
                         <div className="form-field" style={{ justifyContent: 'flex-end' }}>
                           <button type="submit" className="btn btn-gold btn-sm">Save Score</button>
