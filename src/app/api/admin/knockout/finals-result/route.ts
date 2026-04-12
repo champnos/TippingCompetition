@@ -69,15 +69,16 @@ export async function POST(req: NextRequest) {
 
   for (const tip of typedTips) {
     const pickedWinner = tip.team_id === winner_team_id
-    const actual_team_margin = pickedWinner ? actual_margin : -actual_margin
+    // Positive margin if tipped team won, negative if they lost
+    const teamPerspectiveMargin = pickedWinner ? actual_margin : -actual_margin
     const predicted = tip.predicted_margin ?? 0
-    const margin_error = Math.abs(predicted - actual_team_margin)
+    const margin_error = Math.abs(predicted - teamPerspectiveMargin)
     const result = pickedWinner ? 'win' : 'loss'
 
     // Update the tip
     await supabase
       .from('knockout_finals_tips')
-      .update({ actual_margin: actual_team_margin, margin_error, result })
+      .update({ actual_margin: teamPerspectiveMargin, margin_error, result })
       .eq('id', tip.id)
 
     if (result === 'win') {
