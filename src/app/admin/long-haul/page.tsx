@@ -112,9 +112,7 @@ export default async function AdminLongHaulPage({
         for (const [rn, pts] of roundTotals) {
           rawScore += pts
           if (rn <= MID_YEAR_ROUND) {
-            if (rn !== e.joker_round_1 && rn !== e.joker_round_2) {
-              midYearScore += pts
-            }
+            midYearScore += pts  // raw tips only — joker multipliers never apply to mid-year
           }
           if (rn === e.joker_round_1) {
             jokerBonus += pts * 1

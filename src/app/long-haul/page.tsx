@@ -61,6 +61,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   entry_locked: 'Your entry is locked — tips can no longer be changed.',
   entry_save_failed: 'Failed to save entry. Please try again.',
   tips_save_failed: 'Failed to save tips. Please try again.',
+  season_started: 'The season has already started — tips are now locked.',
 }
 
 const MID_YEAR_ROUND = 11
@@ -216,10 +217,7 @@ export default async function LongHaulPage({
       for (const [rn, pts] of roundTotals) {
         rawScore += pts
         if (rn <= MID_YEAR_ROUND) {
-          // Jokers excluded from mid-year
-          if (rn !== e.joker_round_1 && rn !== e.joker_round_2) {
-            midYearScore += pts
-          }
+          midYearScore += pts  // raw tips only — joker multipliers never apply to mid-year
         }
         if (rn === e.joker_round_1) {
           jokerBonus += pts * 1  // double = +1× extra (already in rawScore)

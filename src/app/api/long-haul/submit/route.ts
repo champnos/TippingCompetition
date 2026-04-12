@@ -30,6 +30,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(new URL('/long-haul?error=competition_not_found', req.url))
   }
 
+  // Check if season has already started
+  const { data: firstGame } = await supabase
+    .from('games')
+    .select('match_time, rounds!inner(season_id)')
+    .eq('rounds.season_id', competition.season_id)
+    .order('match_time', { ascending: true })
+    .limit(1)
+    .single()
+
+  if (firstGame && new Date() >= new Date(firstGame.match_time)) {
+    return NextResponse.redirect(new URL('/long-haul?error=season_started', req.url))
+  }
+
   // Validate joker rounds are valid round_numbers in this season
   const { data: validRounds } = await supabase
     .from('rounds')
