@@ -7,7 +7,7 @@ export default async function AdminPage({
   searchParams: {
     imported?: string; skipped?: string; skip_reasons?: string; error?: string
     result_imported?: string; result_skipped?: string; result_skip_reasons?: string
-    graded?: string
+    graded?: string; comp_updated?: string; edit?: string
   }
 }) {
   const supabase = createClient()
@@ -342,13 +342,14 @@ export default async function AdminPage({
                     <td>{(seasons ?? []).find((s) => s.id === c.season_id)?.year ?? c.season_id}</td>
                     <td>{c.entry_fee != null ? `$${c.entry_fee}` : '—'}</td>
                     <td>{c.is_active ? '✅ Active' : 'No'}</td>
-                    <td>
+                    <td style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                       {!c.is_active && (
                         <form action="/api/admin/competition/activate" method="POST" style={{ display: 'inline' }}>
                           <input type="hidden" name="id" value={c.id} />
                           <button type="submit" className="btn btn-sm btn-gold">Set Active</button>
                         </form>
                       )}
+                      <a href={`/admin?edit=${c.id}`} className="btn btn-sm btn-primary">✏️ Edit</a>
                     </td>
                   </tr>
                 ))}
@@ -358,6 +359,50 @@ export default async function AdminPage({
         ) : (
           <p>No competitions yet.</p>
         )}
+        {searchParams.edit && (() => {
+          const editComp = (competitions ?? []).find((c) => c.id === Number(searchParams.edit))
+          if (!editComp) return null
+          const seasonYear = (seasons ?? []).find((s) => s.id === editComp.season_id)?.year ?? editComp.season_id
+          return (
+            <div style={{ marginTop: 20, padding: '16px', background: '#f8fafc', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <h3 style={{ marginBottom: 14 }}>Edit Competition: {editComp.name}</h3>
+              <p style={{ marginBottom: 12, fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                Season: <strong>{seasonYear}</strong> (cannot be changed)
+              </p>
+              <form action="/api/admin/competition/update" method="POST">
+                <input type="hidden" name="id" value={editComp.id} />
+                <div className="form-grid">
+                  <div className="form-field">
+                    <label className="form-label">Competition Name</label>
+                    <input
+                      type="text"
+                      name="name"
+                      required
+                      defaultValue={editComp.name}
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">Entry Fee ($)</label>
+                    <input
+                      type="number"
+                      name="entry_fee"
+                      min={0}
+                      step="0.01"
+                      defaultValue={editComp.entry_fee ?? ''}
+                      placeholder="e.g. 30"
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-field" style={{ justifyContent: 'flex-end', gap: 8, display: 'flex', alignItems: 'flex-end' }}>
+                    <a href="/admin" className="btn btn-sm btn-primary">Cancel</a>
+                    <button type="submit" className="btn btn-sm btn-gold">💾 Save Changes</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          )
+        })()}
         <h3 style={{ marginBottom: 14, marginTop: 4 }}>Add Competition</h3>
         <form action="/api/admin/competition" method="POST">
           <div className="form-grid">
@@ -409,6 +454,11 @@ export default async function AdminPage({
         {searchParams.graded && (
           <div style={{ background: '#f0fff4', border: '1px solid #bbf7d0', color: 'var(--success)', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
             ✅ Result saved and tips graded.
+          </div>
+        )}
+        {searchParams.comp_updated && (
+          <div style={{ background: '#f0fff4', border: '1px solid #bbf7d0', color: 'var(--success)', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
+            ✅ Competition updated successfully.
           </div>
         )}
         <p style={{ marginBottom: 12, fontSize: '0.9rem', color: '#555' }}>
