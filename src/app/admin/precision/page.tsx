@@ -85,8 +85,21 @@ export default async function AdminPrecisionPage({
 
   const prizePerWinner = winners.length > 0 ? prizePool / winners.length : 0
 
+  // Prize breakdown: $30 for 3rd last, 70/30 split of remainder for 1st/2nd
+  const thirdLastPrize = 30
+  const remainingPool = prizePool - thirdLastPrize
+  const firstPrize = Math.round((remainingPool * 0.7) / 10) * 10
+  const secondPrize = Math.round((remainingPool * 0.3) / 10) * 10
+  const showPrizeBreakdown = entries.length >= 3
+
   const activeCount = entries.filter((e) => e.is_active).length
   const eliminatedCount = entries.filter((e) => !e.is_active).length
+
+  // Sort leaderboard: active first, then by eliminated_round descending
+  const leaderboard = [...entries].sort((a, b) => {
+    if (a.is_active !== b.is_active) return a.is_active ? -1 : 1
+    return (b.eliminated_round ?? 0) - (a.eliminated_round ?? 0)
+  })
 
   const errorMsg = searchParams.error ? `Error: ${searchParams.error}` : null
   const processedMsg = searchParams.processed ? 'Round results processed successfully.' : null
@@ -175,7 +188,7 @@ export default async function AdminPrecisionPage({
                 <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>Round {finalRound}</div>
               </div>
             )}
-            {winners.length > 0 && prizePool > 0 && (
+            {winners.length > 0 && prizePool > 0 && !showPrizeBreakdown && (
               <div>
                 <div className="form-label">Prize per Winner ({winners.length} winner{winners.length !== 1 ? 's' : ''})</div>
                 <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--gold-dark)' }}>
@@ -184,6 +197,30 @@ export default async function AdminPrecisionPage({
               </div>
             )}
           </div>
+
+          {showPrizeBreakdown && prizePool > 0 && (
+            <div style={{ marginTop: 20, padding: '14px 16px', background: 'var(--surface-alt, #f3f4f6)', borderRadius: 8 }}>
+              <div className="form-label" style={{ marginBottom: 10, fontSize: '0.85rem', letterSpacing: '0.05em' }}>PRIZE BREAKDOWN</div>
+              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                <div>
+                  <div className="form-label">3rd Last Prize</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--gold-dark)' }}>${thirdLastPrize}</div>
+                </div>
+                <div>
+                  <div className="form-label">1st Place (70%)</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--gold-dark)' }}>${firstPrize}</div>
+                </div>
+                <div>
+                  <div className="form-label">2nd Place (30%)</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--gold-dark)' }}>${secondPrize}</div>
+                </div>
+              </div>
+              <p style={{ marginTop: 10, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                Note: Only players with <strong>is_active = true</strong> at end of season are eligible for 1st/2nd place prizes.
+              </p>
+            </div>
+          )}
+
           {winners.length > 0 && (
             <div style={{ marginTop: 16 }}>
               <div className="form-label" style={{ marginBottom: 6 }}>
@@ -220,19 +257,32 @@ export default async function AdminPrecisionPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.map((e) => (
-                    <tr key={e.id}>
-                      <td>{e.profiles?.full_name ?? e.user_id}</td>
-                      <td className="center">
-                        {e.is_active
-                          ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>✅ Active</span>
-                          : <span style={{ color: 'var(--danger)' }}>❌ Eliminated</span>
-                        }
-                      </td>
-                      <td className="center">{e.eliminated_round ?? '—'}</td>
-                      <td className="center">${Number(e.total_paid).toFixed(2)}</td>
-                    </tr>
-                  ))}
+                  {leaderboard.map((e, idx) => {
+                    const prev = idx > 0 ? leaderboard[idx - 1] : null
+                    const showDivider = prev?.is_active && !e.is_active
+                    return (
+                      <>
+                        {showDivider && (
+                          <tr key={`divider-${e.id}`}>
+                            <td colSpan={4} style={{ textAlign: 'center', padding: '8px', background: 'var(--surface-alt, #f3f4f6)', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em' }}>
+                              — NO MONIES —
+                            </td>
+                          </tr>
+                        )}
+                        <tr key={e.id}>
+                          <td>{e.profiles?.full_name ?? e.user_id}</td>
+                          <td className="center">
+                            {e.is_active
+                              ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>✅ Active</span>
+                              : <span style={{ color: 'var(--danger)' }}>❌ Eliminated</span>
+                            }
+                          </td>
+                          <td className="center">{e.eliminated_round ?? '—'}</td>
+                          <td className="center">${Number(e.total_paid).toFixed(2)}</td>
+                        </tr>
+                      </>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

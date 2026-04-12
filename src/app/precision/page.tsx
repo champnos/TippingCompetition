@@ -171,7 +171,7 @@ export default async function PrecisionPage({
       return (b.eliminated_round ?? 0) - (a.eliminated_round ?? 0)
     })
 
-  const canTip = !!entry && entry.is_active && !!currentRound && !currentRound.locked
+  const canTip = !!entry && !!currentRound && !currentRound.locked
 
   const errorMsg = searchParams.error ? ERROR_MESSAGES[searchParams.error] ?? searchParams.error : null
   const savedMsg = searchParams.saved ? 'Tip saved successfully!' : null
@@ -231,6 +231,13 @@ export default async function PrecisionPage({
             <h2>Round {currentRound.round_number} — Submit Tip</h2>
             {currentTip && <span className="badge-tipped">✓ Tip submitted</span>}
           </div>
+
+          {entry && !entry.is_active && (
+            <div style={{ marginBottom: 16, padding: '10px 14px', background: '#fff7ed', borderRadius: 6, border: '1px solid #fed7aa', color: '#92400e' }}>
+              ⚠️ You have been eliminated but can still tip for the pride leaderboard.
+            </div>
+          )}
+
           <p style={{ marginBottom: 16, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
             Pick one team to win. Each team can only be used once per season.
             Win = survive. Loss or draw = eliminated. Max round: 18.
@@ -281,9 +288,9 @@ export default async function PrecisionPage({
         </div>
       )}
 
-      {!canTip && entry && !entry.is_active && (
+      {!canTip && !currentRound && entry && (
         <div className="section-card">
-          <p>You have been eliminated in Round {entry.eliminated_round}. Better luck next season!</p>
+          <p>No open round at the moment. Check back soon!</p>
         </div>
       )}
 
@@ -344,25 +351,38 @@ export default async function PrecisionPage({
                 </tr>
               </thead>
               <tbody>
-                {leaderboard.map((row, idx) => (
-                  <tr
-                    key={row.entry_id}
-                    className={[
-                      idx === 0 && row.is_active ? 'rank-1' : '',
-                      row.user_id === user.id ? 'current-user' : '',
-                    ].filter(Boolean).join(' ')}
-                  >
-                    <td className="center">{idx + 1}</td>
-                    <td>{row.full_name ?? row.user_id}</td>
-                    <td className="center">
-                      {row.is_active
-                        ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>✅ Active</span>
-                        : <span style={{ color: 'var(--danger)' }}>❌ Rd {row.eliminated_round}</span>
-                      }
-                    </td>
-                    <td className="center">{row.rounds_survived}</td>
-                  </tr>
-                ))}
+                {leaderboard.map((row, idx) => {
+                  const prevRow = idx > 0 ? leaderboard[idx - 1] : null
+                  const showDivider = prevRow?.is_active && !row.is_active
+                  return (
+                    <>
+                      {showDivider && (
+                        <tr key={`divider-${row.entry_id}`}>
+                          <td colSpan={4} style={{ textAlign: 'center', padding: '8px', background: 'var(--surface-alt, #f3f4f6)', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.05em' }}>
+                            — NO MONIES —
+                          </td>
+                        </tr>
+                      )}
+                      <tr
+                        key={row.entry_id}
+                        className={[
+                          idx === 0 && row.is_active ? 'rank-1' : '',
+                          row.user_id === user.id ? 'current-user' : '',
+                        ].filter(Boolean).join(' ')}
+                      >
+                        <td className="center">{idx + 1}</td>
+                        <td>{row.full_name ?? row.user_id}</td>
+                        <td className="center">
+                          {row.is_active
+                            ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>✅ Active</span>
+                            : <span style={{ color: 'var(--danger)' }}>❌ Rd {row.eliminated_round}</span>
+                          }
+                        </td>
+                        <td className="center">{row.rounds_survived}</td>
+                      </tr>
+                    </>
+                  )
+                })}
               </tbody>
             </table>
           </div>
