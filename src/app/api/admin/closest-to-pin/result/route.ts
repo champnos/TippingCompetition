@@ -115,5 +115,34 @@ export async function POST(req: NextRequest) {
       .eq('id', tip.id)
   }
 
+  // Aggregate total_score and correct_tips_count per entry and write back
+  const affectedEntryIds = [...new Set(compTips.map((t) => t.entry_id))]
+  if (affectedEntryIds.length > 0) {
+    const { data: allEntryTips } = await supabase
+      .from('closest_to_pin_tips')
+      .select('entry_id, round_score, result')
+      .in('entry_id', affectedEntryIds)
+      .neq('result', 'pending')
+
+    const totals = new Map<number, { total: number; wins: number }>()
+    for (const t of allEntryTips ?? []) {
+      const curr = totals.get(t.entry_id) ?? { total: 0, wins: 0 }
+      totals.set(t.entry_id, {
+        total: curr.total + Number(t.round_score ?? 0),
+        wins: curr.wins + (t.result === 'correct' ? 1 : 0),
+      })
+    }
+
+    for (const [entryId, stats] of totals) {
+      await supabase
+        .from('closest_to_pin_entries')
+        .update({
+          total_score: stats.total,
+          correct_tips_count: stats.wins,
+        })
+        .eq('id', entryId)
+    }
+  }
+
   return NextResponse.redirect(new URL('/admin/closest-to-pin?processed=1', req.url))
 }

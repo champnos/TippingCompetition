@@ -25,6 +25,15 @@ type CtpTipWithEntry = {
   closest_to_pin_entries: { user_id: string; profiles: { full_name: string | null } | null }
 }
 
+type CtpLeaderboardRow = {
+  entry_id: number
+  user_id: string
+  full_name: string | null
+  avg_score: number | null
+  rounds_played: number
+  correct_tips_count: number
+}
+
 export default async function AdminClosestToPinPage({
   searchParams,
 }: {
@@ -61,6 +70,7 @@ export default async function AdminClosestToPinPage({
   // Get entries for this competition
   let ctpEntries: CtpEntry[] = []
   let currentRoundTips: CtpTipWithEntry[] = []
+  let leaderboard: CtpLeaderboardRow[] = []
 
   if (competition) {
     const { data: entriesData } = await supabase
@@ -93,9 +103,54 @@ export default async function AdminClosestToPinPage({
 
       currentRoundTips = (tipsData ?? []) as unknown as CtpTipWithEntry[]
     }
+
+    // Build leaderboard from all scored tips
+    if (ctpEntries.length > 0) {
+      const entryIds = ctpEntries.map((e) => e.id)
+      const { data: allScoredTips } = await supabase
+        .from('closest_to_pin_tips')
+        .select('entry_id, round_score, result')
+        .in('entry_id', entryIds)
+        .neq('result', 'pending')
+
+      const scoreMap = new Map<number, { total: number; count: number; wins: number }>()
+      for (const tip of allScoredTips ?? []) {
+        if (tip.round_score === null) continue
+        const curr = scoreMap.get(tip.entry_id) ?? { total: 0, count: 0, wins: 0 }
+        scoreMap.set(tip.entry_id, {
+          total: curr.total + Number(tip.round_score),
+          count: curr.count + 1,
+          wins: curr.wins + (tip.result === 'correct' ? 1 : 0),
+        })
+      }
+
+      leaderboard = ctpEntries.map((e) => {
+        const stats = scoreMap.get(e.id)
+        return {
+          entry_id: e.id,
+          user_id: e.user_id,
+          full_name: e.profiles?.full_name ?? null,
+          avg_score: stats && stats.wins > 0 ? stats.total / stats.wins : null,
+          rounds_played: stats?.count ?? 0,
+          correct_tips_count: stats?.wins ?? 0,
+        }
+      })
+
+      leaderboard.sort((a, b) => {
+        if (a.avg_score === null && b.avg_score === null) return 0
+        if (a.avg_score === null) return 1
+        if (b.avg_score === null) return -1
+        return a.avg_score - b.avg_score
+      })
+    }
   }
 
   const prizePool = ctpEntries.reduce((sum, e) => sum + Number(e.total_paid), 0)
+  const ctpPrizes = ctpEntries.length >= 3 ? {
+    thirdLast: 30,
+    first: Math.round((prizePool - 30) * 0.7 / 10) * 10,
+    second: Math.round((prizePool - 30) * 0.3 / 10) * 10,
+  } : null
 
   const seasonRoundsForComp = competition
     ? (allRounds ?? []).filter((r) => r.season_id === competition.season_id)
@@ -171,7 +226,31 @@ export default async function AdminClosestToPinPage({
           <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--gold-dark)' }}>
             ${prizePool.toFixed(2)}
           </div>
-          <p style={{ marginTop: 8 }}>Total collected from {ctpEntries.length} entrant{ctpEntries.length !== 1 ? 's' : ''}</p>
+          <p style={{ marginTop: 8 }}>Total collected from {ctpEntries.length} entrant{ctpEntries.length !== 1 ? 's' : ''} (entry fee: $30)</p>
+          {ctpPrizes && (
+            <div style={{ marginTop: 16, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+              <div>
+                <div className="form-label">🥇 1st Place</div>
+                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>${ctpPrizes.first.toFixed(0)}</div>
+              </div>
+              <div>
+                <div className="form-label">🥈 2nd Place</div>
+                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>${ctpPrizes.second.toFixed(0)}</div>
+              </div>
+              <div>
+                <div className="form-label">3rd Last Place</div>
+                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>${ctpPrizes.thirdLast.toFixed(0)}</div>
+              </div>
+            </div>
+          )}
+          {!ctpPrizes && ctpEntries.length > 0 && (
+            <p style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+              Prize breakdown requires at least 3 entrants.
+            </p>
+          )}
+          <p style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            Prizes awarded to players with 15+ wins only.
+          </p>
         </div>
       )}
 
@@ -278,6 +357,55 @@ export default async function AdminClosestToPinPage({
                         {tip?.result === 'draw' && <span style={{ color: 'var(--text-muted)', fontWeight: 700 }}>— Draw</span>}
                         {tip?.result === 'pending' && <span style={{ color: 'var(--text-muted)' }}>⏳ Pending</span>}
                         {!tip?.result && '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Leaderboard ── */}
+      {leaderboard.length > 0 && (
+        <div className="section-card">
+          <div className="section-card-header">
+            <h2>Leaderboard</h2>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Lower average = better</span>
+          </div>
+          <div className="table-wrap">
+            <table className="afl-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th className="center">Rounds Played</th>
+                  <th className="center">Wins</th>
+                  <th className="center">Avg Score (lower is better)</th>
+                  <th className="center">Eligible</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaderboard.map((row, idx) => {
+                  const isIneligible = row.correct_tips_count < 15
+                  return (
+                    <tr
+                      key={row.entry_id}
+                      className={idx === 0 && row.avg_score !== null ? 'rank-1' : idx === 1 && row.avg_score !== null ? 'rank-2' : idx === 2 && row.avg_score !== null ? 'rank-3' : ''}
+                      style={isIneligible ? { opacity: 0.6 } : undefined}
+                    >
+                      <td className="center">{row.avg_score !== null ? idx + 1 : '—'}</td>
+                      <td>{row.full_name ?? row.user_id}</td>
+                      <td className="center">{row.rounds_played}</td>
+                      <td className="center">{row.correct_tips_count}</td>
+                      <td className="center" style={{ fontWeight: 700 }}>
+                        {row.avg_score !== null ? row.avg_score.toFixed(2) : '—'}
+                      </td>
+                      <td className="center">
+                        {isIneligible
+                          ? <span style={{ color: 'var(--danger)', fontWeight: 600 }}>⚠️ Ineligible</span>
+                          : <span style={{ color: 'var(--success)' }}>✅</span>}
                       </td>
                     </tr>
                   )

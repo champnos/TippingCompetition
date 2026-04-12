@@ -34,6 +34,7 @@ type LeaderboardEntry = {
   full_name: string | null
   avg_score: number | null
   rounds_played: number
+  correct_tips_count: number
 }
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -155,11 +156,15 @@ export default async function ClosestToPinPage({
       .neq('result', 'pending')
 
     // Aggregate per entry
-    const scoreMap = new Map<number, { total: number; count: number }>()
+    const scoreMap = new Map<number, { total: number; count: number; wins: number }>()
     for (const tip of scoredTips ?? []) {
       if (tip.round_score === null) continue
-      const curr = scoreMap.get(tip.entry_id) ?? { total: 0, count: 0 }
-      scoreMap.set(tip.entry_id, { total: curr.total + Number(tip.round_score), count: curr.count + 1 })
+      const curr = scoreMap.get(tip.entry_id) ?? { total: 0, count: 0, wins: 0 }
+      scoreMap.set(tip.entry_id, {
+        total: curr.total + Number(tip.round_score),
+        count: curr.count + 1,
+        wins: curr.wins + (tip.result === 'correct' ? 1 : 0),
+      })
     }
 
     leaderboard = typedEntries.map((e) => {
@@ -168,8 +173,9 @@ export default async function ClosestToPinPage({
         entry_id: e.id,
         user_id: e.user_id,
         full_name: e.profiles?.full_name ?? null,
-        avg_score: stats && stats.count > 0 ? stats.total / stats.count : null,
+        avg_score: stats && stats.wins > 0 ? stats.total / stats.wins : null,
         rounds_played: stats?.count ?? 0,
+        correct_tips_count: stats?.wins ?? 0,
       }
     })
 
@@ -323,20 +329,29 @@ export default async function ClosestToPinPage({
                   <th>#</th>
                   <th>Name</th>
                   <th className="center">Rounds Played</th>
+                  <th className="center">Wins</th>
                   <th className="center">Avg Score (lower is better)</th>
+                  <th className="center">Eligible</th>
                 </tr>
               </thead>
               <tbody>
                 {leaderboard.map((row, idx) => {
                   const rankClass = idx === 0 && row.avg_score !== null ? 'rank-1' : idx === 1 && row.avg_score !== null ? 'rank-2' : idx === 2 && row.avg_score !== null ? 'rank-3' : ''
                   const isCurrentUser = row.user_id === user.id
+                  const isIneligible = row.correct_tips_count < 15
                   return (
-                    <tr key={row.entry_id} className={[rankClass, isCurrentUser ? 'current-user' : ''].filter(Boolean).join(' ')}>
+                    <tr key={row.entry_id} className={[rankClass, isCurrentUser ? 'current-user' : ''].filter(Boolean).join(' ')} style={isIneligible ? { opacity: 0.6 } : undefined}>
                       <td className="center">{row.avg_score !== null ? idx + 1 : '—'}</td>
                       <td>{row.full_name ?? row.user_id}</td>
                       <td className="center">{row.rounds_played}</td>
+                      <td className="center">{row.correct_tips_count}</td>
                       <td className="center">
                         {row.avg_score !== null ? row.avg_score.toFixed(2) : '—'}
+                      </td>
+                      <td className="center">
+                        {isIneligible
+                          ? <span style={{ color: 'var(--danger)', fontWeight: 600 }}>⚠️ Ineligible</span>
+                          : <span style={{ color: 'var(--success)' }}>✅</span>}
                       </td>
                     </tr>
                   )
