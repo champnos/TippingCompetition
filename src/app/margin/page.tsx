@@ -55,6 +55,8 @@ type LeaderboardRow = {
   average: number
 }
 
+const NO_TIPS_SCORE = 9999
+
 const ERROR_MESSAGES: Record<string, string> = {
   missing_fields: 'Please fill in all required fields.',
   competition_not_found: 'Competition not found.',
@@ -205,7 +207,7 @@ export default async function MarginPage({
     .map((e) => {
       const totalScore = Number(e.total_score)
       const correctTips = Number(e.correct_tips_count ?? 0)
-      const average = correctTips > 0 ? totalScore / correctTips : 9999
+      const average = correctTips > 0 ? totalScore / correctTips : NO_TIPS_SCORE
       return {
         entry_id: e.id,
         user_id: e.user_id,
@@ -457,7 +459,7 @@ export default async function MarginPage({
                     key={row.entry_id}
                     className={[
                       idx === 0 ? 'rank-1' : idx === 1 ? 'rank-2' : idx === 2 ? 'rank-3' : '',
-                      row.user_id === user!.id ? 'current-user' : '',
+                      row.user_id === user?.id ? 'current-user' : '',
                     ].filter(Boolean).join(' ')}
                   >
                     <td className="center">{idx + 1}</td>
@@ -465,7 +467,7 @@ export default async function MarginPage({
                     <td className="center">{row.total_score.toFixed(0)}</td>
                     <td className="center">{row.correct_tips_count}</td>
                     <td className="center" style={{ fontWeight: 700 }}>
-                      {row.average === 9999 ? '—' : row.average.toFixed(1)}
+                      {row.average === NO_TIPS_SCORE ? '—' : row.average.toFixed(1)}
                     </td>
                   </tr>
                 ))}

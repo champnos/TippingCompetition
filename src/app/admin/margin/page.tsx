@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { marginPrizes } from '@/lib/margin'
 
+const NO_TIPS_SCORE = 9999
+
 type MarginEntry = {
   id: number
   competition_id: number
@@ -82,7 +84,7 @@ export default async function AdminMarginPage({
       .map((e) => {
         const totalScore = Number(e.total_score)
         const correctTips = Number(e.correct_tips_count ?? 0)
-        const average = correctTips > 0 ? totalScore / correctTips : 9999
+        const average = correctTips > 0 ? totalScore / correctTips : NO_TIPS_SCORE
         return {
           entry_id: e.id,
           user_id: e.user_id,
@@ -291,7 +293,7 @@ export default async function AdminMarginPage({
                     <td className="center">{row.total_score.toFixed(0)}</td>
                     <td className="center">{row.correct_tips_count}</td>
                     <td className="center" style={{ fontWeight: 700 }}>
-                      {row.average === 9999 ? '—' : row.average.toFixed(1)}
+                      {row.average === NO_TIPS_SCORE ? '—' : row.average.toFixed(1)}
                     </td>
                   </tr>
                 ))}
