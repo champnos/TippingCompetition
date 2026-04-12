@@ -334,7 +334,31 @@ export default async function AdminKnockoutPage({
           <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--gold-dark)' }}>
             ${prizePool.toFixed(2)}
           </div>
-          <p style={{ marginTop: 8 }}>Total collected from {knockoutEntries.length} entrant{knockoutEntries.length !== 1 ? 's' : ''}</p>
+          <p style={{ marginTop: 8 }}>
+            Total collected from {knockoutEntries.length} entrant{knockoutEntries.length !== 1 ? 's' : ''} (entry fee: $100, buy-backs included)
+          </p>
+
+          {knockoutEntries.length >= 3 && (
+            <div style={{ marginTop: 16, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+              <div>
+                <div className="form-label">3rd Last Place</div>
+                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>$100</div>
+              </div>
+              <div>
+                <div className="form-label">🥇 1st Place (70%)</div>
+                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>${Math.round(((prizePool - 100) * 0.70) / 10) * 10}</div>
+              </div>
+              <div>
+                <div className="form-label">🥈 2nd Place (30%)</div>
+                <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>${(prizePool - 100) - Math.round(((prizePool - 100) * 0.70) / 10) * 10}</div>
+              </div>
+            </div>
+          )}
+          {knockoutEntries.length > 0 && knockoutEntries.length < 3 && (
+            <p style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+              Prize breakdown requires at least 3 entrants.
+            </p>
+          )}
         </div>
       )}
 
