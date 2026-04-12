@@ -9,8 +9,11 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData()
   const competition_id = Number(formData.get('competition_id'))
   const round_id = Number(formData.get('round_id'))
+  const game_id = Number(formData.get('game_id'))
+  const team_id = Number(formData.get('team_id'))
+  const predicted_margin = Number(formData.get('predicted_margin'))
 
-  if (!competition_id || !round_id) {
+  if (!competition_id || !round_id || !game_id || !team_id || isNaN(predicted_margin) || predicted_margin < 0) {
     return NextResponse.redirect(new URL('/margin?error=missing_fields', req.url))
   }
 
@@ -40,28 +43,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(new URL('/margin?error=no_entry', req.url))
   }
 
-  // Collect all tip_<game_id> fields
-  const tips: { entry_id: number; game_id: number; round_id: number; team_id: number }[] = []
+  // Delete any existing tip for this entry+round (one tip per round rule)
+  await supabase
+    .from('margin_tips')
+    .delete()
+    .eq('entry_id', entry.id)
+    .eq('round_id', round_id)
 
-  for (const [key, value] of formData.entries()) {
-    if (key.startsWith('tip_')) {
-      const game_id = Number(key.replace('tip_', ''))
-      const team_id = Number(value)
-      if (game_id && team_id) {
-        tips.push({ entry_id: entry.id, game_id, round_id, team_id })
-      }
-    }
-  }
+  // Insert the new tip
+  const { error } = await supabase
+    .from('margin_tips')
+    .insert({
+      entry_id: entry.id,
+      game_id,
+      round_id,
+      team_id,
+      predicted_margin,
+    })
 
-  if (tips.length > 0) {
-    const { error } = await supabase
-      .from('margin_tips')
-      .upsert(tips, { onConflict: 'entry_id,game_id' })
-
-    if (error) {
-      console.error('Margin tips upsert error:', error)
-      return NextResponse.redirect(new URL('/margin?error=tips_save_failed', req.url))
-    }
+  if (error) {
+    console.error('Margin tip insert error:', error)
+    return NextResponse.redirect(new URL('/margin?error=tips_save_failed', req.url))
   }
 
   return NextResponse.redirect(new URL('/margin?saved=1', req.url))
