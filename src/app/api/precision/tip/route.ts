@@ -27,10 +27,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(new URL('/precision?error=no_entry', req.url))
   }
 
-  if (!entry.is_active) {
-    return NextResponse.redirect(new URL('/precision?error=not_active', req.url))
-  }
-
   // Check round is not locked
   const { data: round } = await supabase
     .from('rounds')
