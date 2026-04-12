@@ -3,14 +3,15 @@
  */
 export const MARGIN_ELIGIBILITY_THRESHOLD = 15
 
-
- * OR + R1–4  → 1×
- * R5–9       → 2×
- * R10–14     → 3×
- * R15–19     → 4×
- * R20–24     → 5×
+/**
+ * Returns the accuracy factor for Margin ("Closest to Pin") scoring.
+ * OR + R1-R4  -> 1x
+ * R5-R9       -> 2x
+ * R10-R14     -> 3x
+ * R15-R19     -> 4x
+ * R20-R24     -> 5x
  *
- * "OR" (Opening Round) is treated as round 0 or any round_number ≤ 4.
+ * "OR" (Opening Round) is treated as round 0 or any round_number <= 4.
  */
 export function marginMultiplier(roundNumber: number): number {
   if (roundNumber <= 4) return 1
