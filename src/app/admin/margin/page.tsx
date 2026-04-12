@@ -11,6 +11,7 @@ type MarginEntry = {
   total_paid: number
   total_score: number
   correct_tips_count: number
+  rounds_tipped: number
   created_at: string
   profiles: { full_name: string | null } | null
 }
@@ -21,6 +22,7 @@ type LeaderboardRow = {
   full_name: string | null
   total_score: number
   correct_tips_count: number
+  rounds_tipped: number
   average: number
 }
 
@@ -72,7 +74,7 @@ export default async function AdminMarginPage({
     const { data: entriesData } = await supabase
       .from('margin_entries')
       .select(`
-        id, competition_id, user_id, total_paid, total_score, correct_tips_count, created_at,
+        id, competition_id, user_id, total_paid, total_score, correct_tips_count, rounds_tipped, created_at,
         profiles(full_name)
       `)
       .eq('competition_id', competition.id)
@@ -84,13 +86,15 @@ export default async function AdminMarginPage({
       .map((e) => {
         const totalScore = Number(e.total_score)
         const correctTips = Number(e.correct_tips_count ?? 0)
-        const average = correctTips > 0 ? totalScore / correctTips : NO_TIPS_SCORE
+        const roundsTipped = Number(e.rounds_tipped ?? 0)
+        const average = roundsTipped > 0 ? totalScore / roundsTipped : NO_TIPS_SCORE
         return {
           entry_id: e.id,
           user_id: e.user_id,
           full_name: e.profiles?.full_name ?? null,
           total_score: totalScore,
           correct_tips_count: correctTips,
+          rounds_tipped: roundsTipped,
           average,
         }
       })
@@ -279,7 +283,9 @@ export default async function AdminMarginPage({
                   <th>Name</th>
                   <th className="center">Total Weighted</th>
                   <th className="center">Correct Tips</th>
+                  <th className="center">Rounds Tipped</th>
                   <th className="center">Average</th>
+                  <th className="center">Eligible</th>
                 </tr>
               </thead>
               <tbody>
@@ -292,8 +298,14 @@ export default async function AdminMarginPage({
                     <td>{row.full_name ?? row.user_id}</td>
                     <td className="center">{row.total_score.toFixed(0)}</td>
                     <td className="center">{row.correct_tips_count}</td>
+                    <td className="center">{row.rounds_tipped}</td>
                     <td className="center" style={{ fontWeight: 700 }}>
                       {row.average === NO_TIPS_SCORE ? '—' : row.average.toFixed(1)}
+                    </td>
+                    <td className="center">
+                      {row.correct_tips_count >= 15
+                        ? <span style={{ color: 'var(--success)' }}>✅</span>
+                        : <span style={{ color: 'var(--danger)' }}>❌</span>}
                     </td>
                   </tr>
                 ))}

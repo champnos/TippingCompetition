@@ -18,20 +18,20 @@ export function marginMultiplier(roundNumber: number): number {
 
 /**
  * Calculates prize distribution for a Margin competition.
- * - $40 flat entry fee (configurable via entryFee param)
+ * - $30 flat entry fee (configurable via entryFee param)
  * - 3rd last place: entry fee back
- * - 1st: 65% of remainder, rounded up to nearest $10
+ * - 1st: 70% of remainder, rounded to nearest $10
  * - 2nd: balance
  */
 export function marginPrizes(
   entrantCount: number,
-  entryFee: number = 40
+  entryFee: number = 30
 ): { thirdLast: number; first: number; second: number } {
   const total = entrantCount * entryFee
   const thirdLast = entryFee
   const remainder = total - thirdLast
-  const firstRaw = remainder * 0.65
-  const first = Math.ceil(firstRaw / 10) * 10
+  const firstRaw = remainder * 0.70
+  const first = Math.round(firstRaw / 10) * 10
   const second = remainder - first
   return { thirdLast, first, second }
 }
