@@ -52,7 +52,7 @@ export default async function AdminLongHaulPage({
   // Find active long haul competition
   const { data: competition } = await supabase
     .from('competitions')
-    .select('id, name, season_id')
+    .select('id, name, season_id, entry_fee')
     .eq('is_active', true)
     .ilike('name', '%long haul%')
     .single()
@@ -138,6 +138,13 @@ export default async function AdminLongHaulPage({
   const midYearLeaderboard = [...leaderboard].sort((a, b) => b.mid_year_score - a.mid_year_score)
 
   const prizePool = entries.reduce((s, e) => s + Number(e.total_paid), 0)
+
+  const entryFee = Number(competition?.entry_fee ?? 30)
+  const midYearPrize = entryFee
+  const thirdLastPrize = entryFee
+  const adjustedPot = prizePool - midYearPrize - thirdLastPrize
+  const firstPrize = entries.length >= 3 ? Math.round((adjustedPot * 0.70) / 10) * 10 : 0
+  const secondPrize = entries.length >= 3 ? adjustedPot - firstPrize : 0
 
   const errorMsg = searchParams.error ? `Error: ${searchParams.error}` : null
   const lockedMsg = searchParams.locked ? 'All entries have been locked.' : null
@@ -228,7 +235,50 @@ export default async function AdminLongHaulPage({
           <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--gold-dark)' }}>
             ${prizePool.toFixed(2)}
           </div>
-          <p style={{ marginTop: 8 }}>Total collected from {entries.length} entrant{entries.length !== 1 ? 's' : ''}</p>
+          <p style={{ marginTop: 8 }}>Total collected from {entries.length} entrant{entries.length !== 1 ? 's' : ''} (entry fee: ${entryFee.toFixed(0)})</p>
+
+          {entries.length >= 3 && (
+            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                <div>
+                  <div className="form-label">Mid-Year Prize (R1–11 leader)</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>${midYearPrize.toFixed(0)}</div>
+                  {midYearLeaderboard.length > 0 && midYearLeaderboard[0].mid_year_score > 0 && (
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                      {midYearLeaderboard
+                        .filter(r => r.mid_year_score === midYearLeaderboard[0].mid_year_score)
+                        .map(r => r.full_name ?? r.user_id)
+                        .join(' / ')}
+                      {' '}({midYearLeaderboard[0].mid_year_score} pts)
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="form-label">3rd Last Place</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>${thirdLastPrize.toFixed(0)}</div>
+                </div>
+                <div>
+                  <div className="form-label">Adjusted Pot</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>${adjustedPot.toFixed(2)}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                <div>
+                  <div className="form-label">🥇 1st Place (70%)</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>${firstPrize.toFixed(0)}</div>
+                </div>
+                <div>
+                  <div className="form-label">🥈 2nd Place (30%)</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>${secondPrize.toFixed(0)}</div>
+                </div>
+              </div>
+            </div>
+          )}
+          {entries.length > 0 && entries.length < 3 && (
+            <p style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+              Prize breakdown requires at least 3 entrants.
+            </p>
+          )}
         </div>
       )}
 
