@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   const { data: tips } = await supabase
     .from('knockout_tips')
     .select(`
-      id, entry_id, team_id, got_my_back_team_id, got_my_back_activated, result,
+      id, entry_id, team_id, got_my_back_team_id, got_my_back_activated, result, free_pass_used,
       knockout_entries!inner(id, is_active, got_my_back_used, competition_id)
     `)
     .eq('round_id', round_id)
@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
     got_my_back_team_id: number | null
     got_my_back_activated: boolean
     result: string | null
+    free_pass_used: boolean
     knockout_entries: {
       id: number
       is_active: boolean
@@ -128,11 +129,16 @@ export async function POST(req: NextRequest) {
       .eq('id', tip.id)
 
     // Eliminate entry on loss or draw (per rule 5a: draws result in elimination)
+    // Free pass survives one loss/draw if used on this tip
     if (result === 'loss' || result === 'draw') {
-      await supabase
-        .from('knockout_entries')
-        .update({ is_active: false, eliminated_round: round.round_number })
-        .eq('id', tip.entry_id)
+      if (tip.free_pass_used) {
+        // Free pass consumed — user survives this round
+      } else {
+        await supabase
+          .from('knockout_entries')
+          .update({ is_active: false, eliminated_round: round.round_number })
+          .eq('id', tip.entry_id)
+      }
     }
   }
 
@@ -150,6 +156,16 @@ export async function POST(req: NextRequest) {
         .update({ free_pass_available: true })
         .in('id', activeEntries.map((e) => e.id))
     }
+  }
+
+  // If this was round 18, expire any free passes that were not used
+  if (round.round_number === 18) {
+    await supabase
+      .from('knockout_entries')
+      .update({ free_pass_available: false })
+      .eq('competition_id', competition_id)
+      .eq('free_pass_available', true)
+      .eq('free_pass_used', false)
   }
 
   return NextResponse.redirect(new URL('/admin/knockout?processed=1', req.url))
