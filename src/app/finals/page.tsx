@@ -405,7 +405,10 @@ export default async function FinalsPage({
 
       {entry && !entry.is_active && (
         <div className="section-card">
-          <p>You were eliminated in Week {entry.eliminated_week}. Better luck next year!</p>
+          {currentWeek === 4
+            ? <p>🏆 The Final Four are battling it out! You were eliminated in Week {entry.eliminated_week}.</p>
+            : <p>You were eliminated in Week {entry.eliminated_week}. Better luck next year!</p>
+          }
         </div>
       )}
 
@@ -489,6 +492,11 @@ export default async function FinalsPage({
                         ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>✅ Still In</span>
                         : <span style={{ color: 'var(--danger)' }}>❌ Out Wk {row.eliminated_week}</span>
                       }
+                      {(currentWeek === 4 || currentWeek === null) && row.is_active && (
+                        <span style={{ marginLeft: 6, fontSize: '0.8rem', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 4, padding: '1px 6px' }}>
+                          🏆 Final Four
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

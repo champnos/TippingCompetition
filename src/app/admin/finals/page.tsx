@@ -45,6 +45,7 @@ export default async function AdminFinalsPage({
     info?: string
     game_added?: string
     score_saved?: string
+    eliminated?: string
   }
 }) {
   const supabase = createClient()
@@ -118,6 +119,29 @@ export default async function AdminFinalsPage({
 
   const lockedWeeks = new Set(weekLocks.filter((w) => w.locked).map((w) => w.finals_week))
 
+  // Determine current finals week (lowest unlocked week 1–4)
+  let currentWeek: number | null = null
+  for (let w = 1; w <= 4; w++) {
+    if (!lockedWeeks.has(w)) {
+      currentWeek = w
+      break
+    }
+  }
+
+  // Fetch error scores for the current week across all entries
+  const entryIds = entries.map((e) => e.id)
+  const weekErrorMap = new Map<number, number | null>()
+  if (currentWeek !== null && entryIds.length > 0) {
+    const { data: weekTips } = await supabase
+      .from('finals_tips')
+      .select('entry_id, error_score')
+      .eq('finals_week', currentWeek)
+      .in('entry_id', entryIds)
+    for (const t of weekTips ?? []) {
+      weekErrorMap.set(t.entry_id, t.error_score)
+    }
+  }
+
   const entryFee = Number(competition?.entry_fee ?? 30)
   const prizePool = entries.reduce((s, e) => s + Number(e.total_paid), 0)
   const activeCount = entries.filter((e) => e.is_active).length
@@ -126,7 +150,13 @@ export default async function AdminFinalsPage({
   // After GF, winner(s) remain active=true. Only losers get eliminated.
   // So winners = entries still active.
   const winners = entries.filter((e) => e.is_active)
-  const prizePerWinner = winners.length > 0 ? prizePool / winners.length : 0
+
+  // Mancini prize split
+  const MIN_ENTRIES_FOR_PRIZE = 3
+  const manciniThirdLast = entryFee
+  const manciniRemaining = prizePool - manciniThirdLast
+  const manciniFirst = Math.round((manciniRemaining * 0.70) / 10) * 10
+  const manciniSecond = manciniRemaining - manciniFirst
 
   const errorMsg = searchParams.error
     ? searchParams.error === 'missing_fields' ? 'Please fill in all required fields.'
@@ -134,6 +164,7 @@ export default async function AdminFinalsPage({
     : searchParams.error === 'lock_failed' ? 'Failed to lock the week. Please try again.'
     : searchParams.error === 'game_failed' ? 'Failed to add game. Please try again.'
     : searchParams.error === 'score_failed' ? 'Failed to save score. Please try again.'
+    : searchParams.error === 'eliminate_failed' ? 'Failed to eliminate entrant. Please try again.'
     : `Error: ${searchParams.error}`
     : null
 
@@ -176,6 +207,11 @@ export default async function AdminFinalsPage({
       {infoMsg && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
           {infoMsg}
+        </div>
+      )}
+      {searchParams.eliminated && (
+        <div style={{ background: '#f0fff4', border: '1px solid #bbf7d0', color: 'var(--success)', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
+          Entrant eliminated successfully.
         </div>
       )}
 
@@ -443,23 +479,44 @@ export default async function AdminFinalsPage({
               <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--danger)' }}>{eliminatedCount}</div>
             </div>
           </div>
-          {winners.length > 0 && prizePool > 0 && (
+          {entries.length >= MIN_ENTRIES_FOR_PRIZE && prizePool > 0 && (
             <div style={{ marginTop: 16 }}>
-              <div className="form-label" style={{ marginBottom: 6 }}>
-                {lockedWeeks.has(4)
-                  ? `Winner${winners.length > 1 ? 's' : ''} (split pot equally)`
-                  : 'Still Active (will split pot if tied in GF)'}
+              <div className="form-label" style={{ marginBottom: 8 }}>Prize Split (Mancini)</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.95rem' }}>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', marginRight: 8 }}>3rd Last:</span>
+                  <strong>${manciniThirdLast.toFixed(2)}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', marginRight: 8 }}>Remaining Pool:</span>
+                  <strong>${manciniRemaining.toFixed(2)}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', marginRight: 8 }}>1st Place (70%):</span>
+                  <strong style={{ color: 'var(--gold-dark)' }}>${manciniFirst.toFixed(2)}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)', marginRight: 8 }}>2nd Place (30%):</span>
+                  <strong>${manciniSecond.toFixed(2)}</strong>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-                {winners.map((w) => (
-                  <span key={w.id} style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 4, padding: '2px 8px', fontSize: '0.9rem' }}>
-                    {w.profiles?.full_name ?? w.user_id}
-                  </span>
-                ))}
-              </div>
-              <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--gold-dark)' }}>
-                ${prizePerWinner.toFixed(2)} per winner
-              </div>
+              {winners.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div className="form-label" style={{ marginBottom: 6 }}>
+                    {lockedWeeks.has(4) ? `Winner${winners.length > 1 ? 's' : ''}` : 'Still Active'}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {winners.map((w) => (
+                      <span key={w.id} style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 4, padding: '2px 8px', fontSize: '0.9rem' }}>
+                        {w.profiles?.full_name ?? w.user_id}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <p style={{ marginTop: 10, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                Prize eligibility determined by admin after Grand Final.
+              </p>
             </div>
           )}
         </div>
@@ -481,28 +538,61 @@ export default async function AdminFinalsPage({
                     <th className="center">Status</th>
                     <th className="center">Eliminated Week</th>
                     <th className="center">Total Paid</th>
+                    <th className="center">This Week&apos;s Error</th>
+                    <th className="center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries
                     .slice()
                     .sort((a, b) => {
-                      if (a.is_active !== b.is_active) return a.is_active ? -1 : 1
-                      return (b.eliminated_week ?? 0) - (a.eliminated_week ?? 0)
+                      const aErr = weekErrorMap.get(a.id) ?? undefined
+                      const bErr = weekErrorMap.get(b.id) ?? undefined
+                      if (aErr === undefined && bErr === undefined) return 0
+                      if (aErr === undefined) return 1
+                      if (bErr === undefined) return -1
+                      return aErr - bErr
                     })
-                    .map((e) => (
-                      <tr key={e.id}>
-                        <td>{e.profiles?.full_name ?? e.user_id}</td>
-                        <td className="center">
-                          {e.is_active
-                            ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>✅ Still In</span>
-                            : <span style={{ color: 'var(--danger)' }}>❌ Eliminated</span>
-                          }
-                        </td>
-                        <td className="center">{e.eliminated_week ? `Week ${e.eliminated_week}` : '—'}</td>
-                        <td className="center">${Number(e.total_paid).toFixed(2)}</td>
-                      </tr>
-                    ))}
+                    .map((e) => {
+                      const errScore = weekErrorMap.get(e.id)
+                      return (
+                        <tr key={e.id}>
+                          <td>{e.profiles?.full_name ?? e.user_id}</td>
+                          <td className="center">
+                            {e.is_active
+                              ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>✅ Still In</span>
+                              : <span style={{ color: 'var(--danger)' }}>❌ Eliminated</span>
+                            }
+                          </td>
+                          <td className="center">{e.eliminated_week ? `Week ${e.eliminated_week}` : '—'}</td>
+                          <td className="center">${Number(e.total_paid).toFixed(2)}</td>
+                          <td className="center">
+                            {errScore === undefined
+                              ? <span style={{ color: 'var(--text-muted)' }}>—</span>
+                              : errScore === 9999
+                                ? <span style={{ color: 'var(--danger)' }}>⚠️ No tip</span>
+                                : <strong>{errScore}</strong>
+                            }
+                          </td>
+                          <td className="center">
+                            {e.is_active && (
+                              <form action="/api/admin/finals/eliminate" method="POST" style={{ display: 'inline' }}>
+                                <input type="hidden" name="entry_id" value={e.id} />
+                                <input type="hidden" name="finals_week" value={currentWeek ?? ''} />
+                                <button
+                                  type="submit"
+                                  className="btn btn-sm"
+                                  style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' }}
+                                  disabled={currentWeek === null}
+                                >
+                                  ✂️ Eliminate
+                                </button>
+                              </form>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                 </tbody>
               </table>
             </div>
