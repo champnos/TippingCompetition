@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { MARGIN_ELIGIBILITY_THRESHOLD } from '@/lib/margin'
 
 type Game = {
   id: number
@@ -495,7 +496,7 @@ export default async function MarginPage({
                     <td className="center">{row.total_score.toFixed(0)}</td>
                     <td className="center">
                       {row.correct_tips_count}
-                      {row.correct_tips_count < 15 && (
+                      {row.correct_tips_count < MARGIN_ELIGIBILITY_THRESHOLD && (
                         <span title="Fewer than 15 correct tips" style={{ marginLeft: 4, color: 'var(--danger)' }}>⚠️</span>
                       )}
                     </td>

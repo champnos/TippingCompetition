@@ -106,6 +106,9 @@ export async function POST(req: NextRequest) {
     let result: string
     let error: number
     const predicted = tip.predicted_margin ?? 0
+    // Scoring: error = abs(predicted - actual margin diff)
+    // For a loss, error is doubled as a penalty for picking the wrong team.
+    // For a draw, error = abs(predicted) since there is no actual margin to compare against.
     if (isDraw) {
       result = 'draw'
       error = Math.abs(predicted)

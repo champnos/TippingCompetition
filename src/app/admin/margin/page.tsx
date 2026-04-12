@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { marginPrizes } from '@/lib/margin'
+import { marginPrizes, MARGIN_ELIGIBILITY_THRESHOLD } from '@/lib/margin'
 
 const NO_TIPS_SCORE = 9999
 
@@ -303,7 +303,7 @@ export default async function AdminMarginPage({
                       {row.average === NO_TIPS_SCORE ? '—' : row.average.toFixed(1)}
                     </td>
                     <td className="center">
-                      {row.correct_tips_count >= 15
+                      {row.correct_tips_count >= MARGIN_ELIGIBILITY_THRESHOLD
                         ? <span style={{ color: 'var(--success)' }}>✅</span>
                         : <span style={{ color: 'var(--danger)' }}>❌</span>}
                     </td>

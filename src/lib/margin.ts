@@ -1,5 +1,9 @@
 /**
- * Returns the accuracy factor for Margin ("Closest to Pin") scoring.
+ * Minimum number of correct tips required for a player to be eligible for prizes.
+ */
+export const MARGIN_ELIGIBILITY_THRESHOLD = 15
+
+
  * OR + R1–4  → 1×
  * R5–9       → 2×
  * R10–14     → 3×
