@@ -25,10 +25,40 @@ type KnockoutTip = {
   got_my_back_team: { name: string; short_name: string | null } | null
 }
 
+type FinalsTip = {
+  id: number
+  entry_id: number
+  finals_round: string
+  team_id: number | null
+  predicted_margin: number | null
+  margin_error: number | null
+  result: string | null
+  eliminated: boolean
+  team: { name: string; short_name: string | null } | null
+}
+
+type FinalsConfig = {
+  id: number
+  competition_id: number
+  finals_round: string
+  is_open: boolean
+  cut_line: number | null
+  actual_margin: number | null
+  winner_team_id: number | null
+}
+
+type Team = {
+  id: number
+  name: string
+  short_name: string | null
+}
+
 const ERROR_MESSAGES: Record<string, string> = {
   missing_fields: 'Please fill in all required fields.',
   not_owner: 'You do not own this entry.',
   not_active: 'Your entry is not active.',
+  not_finals_active: 'Your entry is not active in the finals series.',
+  finals_round_not_open: 'This finals round is not currently open for tips.',
   round_locked: 'This round is locked.',
   no_games: 'No games found for this round.',
   team_not_playing: 'Selected team is not playing this round.',
@@ -92,7 +122,7 @@ export default async function KnockoutPage({
   // Get user's entry
   const { data: entry } = await supabase
     .from('knockout_entries')
-    .select('id, is_active, eliminated_round, got_my_back_used, free_pass_used, free_pass_available, total_paid')
+    .select('id, is_active, eliminated_round, got_my_back_used, free_pass_used, free_pass_available, total_paid, finals_active')
     .eq('competition_id', activeComp.id)
     .eq('user_id', user.id)
     .single()
@@ -153,6 +183,34 @@ export default async function KnockoutPage({
     ? tipHistory.find((t) => t.round_id === currentRound.id)
     : null
 
+  // Finals series data
+  let openFinalsConfig: FinalsConfig | null = null
+  let allTeams: Team[] = []
+  let finalsTipHistory: FinalsTip[] = []
+
+  if (entry?.finals_active) {
+    const [{ data: finalsConfigData }, { data: teamsData }, { data: finalsTipsData }] = await Promise.all([
+      supabase
+        .from('knockout_finals_config')
+        .select('id, competition_id, finals_round, is_open, cut_line, actual_margin, winner_team_id')
+        .eq('competition_id', activeComp.id)
+        .eq('is_open', true)
+        .single(),
+      supabase.from('teams').select('id, name, short_name').order('name'),
+      supabase
+        .from('knockout_finals_tips')
+        .select(`
+          id, entry_id, finals_round, team_id, predicted_margin, margin_error, result, eliminated,
+          team:teams!knockout_finals_tips_team_id_fkey(name, short_name)
+        `)
+        .eq('entry_id', entry.id)
+        .order('id', { ascending: false }),
+    ])
+    openFinalsConfig = (finalsConfigData as FinalsConfig | null) ?? null
+    allTeams = (teamsData ?? []) as Team[]
+    finalsTipHistory = (finalsTipsData ?? []) as unknown as FinalsTip[]
+  }
+
   const now = new Date()
   const errorMsg = searchParams.error ? ERROR_MESSAGES[searchParams.error] ?? searchParams.error : null
 
@@ -184,7 +242,12 @@ export default async function KnockoutPage({
     .filter((t) => !restrictedTeamIds.has(t.id))
 
   const canTip = !!entry && entry.is_active && !!currentRound && !currentRound.locked
-  const canUseFreePass = entry?.free_pass_available && !entry?.free_pass_used
+  const canUseFreePass =
+    entry?.free_pass_available &&
+    !entry?.free_pass_used &&
+    !!currentRound &&
+    currentRound.round_number >= 12 &&
+    currentRound.round_number <= 18
 
   return (
     <main className="page-container">
@@ -400,6 +463,113 @@ export default async function KnockoutPage({
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Finals Series */}
+      {entry?.finals_active && (
+        <div className="section-card">
+          <div className="section-card-header">
+            <h2>🏆 Finals Series</h2>
+          </div>
+
+          {openFinalsConfig ? (
+            <>
+              <p style={{ marginBottom: 16 }}>
+                <strong>{openFinalsConfig.finals_round}</strong> is currently open. Pick your team and predict the winning margin.
+              </p>
+              {(() => {
+                const existingFinalsTip = finalsTipHistory.find(
+                  (t) => t.finals_round === openFinalsConfig!.finals_round
+                )
+                return (
+                  <>
+                    {existingFinalsTip && (
+                      <div style={{ marginBottom: 16, padding: '10px 14px', background: '#f0fff4', borderRadius: 6, border: '1px solid #bbf7d0' }}>
+                        <strong>Current tip:</strong>{' '}
+                        {existingFinalsTip.team?.short_name ?? existingFinalsTip.team?.name ?? '—'}
+                        {existingFinalsTip.predicted_margin !== null && (
+                          <span style={{ marginLeft: 12, color: 'var(--text-muted)' }}>
+                            by {existingFinalsTip.predicted_margin} pts
+                          </span>
+                        )}
+                        {' '}— you can update until results are processed.
+                      </div>
+                    )}
+                    <form action="/api/knockout/finals-tip" method="POST">
+                      <input type="hidden" name="entry_id" value={entry.id} />
+                      <input type="hidden" name="finals_round" value={openFinalsConfig.finals_round} />
+                      <div className="form-grid">
+                        <div className="form-field">
+                          <label className="form-label">Pick Your Team</label>
+                          <select name="team_id" required className="form-select" defaultValue={existingFinalsTip?.team_id ?? ''}>
+                            <option value="">Select a team…</option>
+                            {allTeams.map((t) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="form-field">
+                          <label className="form-label">Predicted Winning Margin</label>
+                          <input
+                            type="number"
+                            name="predicted_margin"
+                            required
+                            min={1}
+                            className="form-input"
+                            placeholder="e.g. 24"
+                            defaultValue={existingFinalsTip?.predicted_margin ?? ''}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 20 }}>
+                        <button type="submit" className="btn btn-gold">
+                          {existingFinalsTip ? '🔄 Update Finals Tip' : '💾 Submit Finals Tip'}
+                        </button>
+                      </div>
+                    </form>
+                  </>
+                )
+              })()}
+            </>
+          ) : (
+            <p>No finals round is currently open for tips.</p>
+          )}
+
+          {finalsTipHistory.length > 0 && (
+            <div style={{ marginTop: 24 }}>
+              <h3 style={{ marginBottom: 12 }}>Finals Tip History</h3>
+              <div className="table-wrap">
+                <table className="afl-table">
+                  <thead>
+                    <tr>
+                      <th>Round</th>
+                      <th>Team Picked</th>
+                      <th>Predicted Margin</th>
+                      <th>Margin Error</th>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {finalsTipHistory.map((tip) => (
+                      <tr key={tip.id}>
+                        <td>{tip.finals_round}</td>
+                        <td>{tip.team?.short_name ?? tip.team?.name ?? '—'}</td>
+                        <td>{tip.predicted_margin ?? '—'}</td>
+                        <td>{tip.margin_error ?? '—'}</td>
+                        <td>
+                          {tip.result === 'win' && <span style={{ color: 'var(--success)', fontWeight: 700 }}>✅ Win</span>}
+                          {tip.result === 'loss' && <span style={{ color: 'var(--danger)', fontWeight: 700 }}>❌ Loss</span>}
+                          {tip.result === 'pending' && <span style={{ color: 'var(--text-muted)' }}>⏳ Pending</span>}
+                          {!tip.result && '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </main>

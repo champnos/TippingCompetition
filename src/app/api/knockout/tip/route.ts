@@ -256,6 +256,9 @@ export async function POST(req: NextRequest) {
     if (!entry.free_pass_available || entry.free_pass_used) {
       return NextResponse.redirect(new URL('/knockout?error=free_pass_not_available', req.url))
     }
+    if (round.round_number < 12 || round.round_number > 18) {
+      return NextResponse.redirect(new URL('/knockout?error=free_pass_not_available', req.url))
+    }
   }
 
   // Upsert the tip
@@ -279,7 +282,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(new URL('/knockout?error=tip_save_failed', req.url))
   }
 
-  // If using free pass, mark it as used on the entry
+  // Burn the free pass immediately on submission
   if (use_free_pass) {
     await supabase
       .from('knockout_entries')
