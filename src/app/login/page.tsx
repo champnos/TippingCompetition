@@ -69,8 +69,7 @@ export default function LoginPage() {
         </form>
 
         <div className="login-footer">
-          <p>No account? <a href="/signup">Sign up</a></p>
-          <p style={{ marginTop: 6 }}><a href="/forgot-password">Forgot password?</a></p>
+          <p><a href="/forgot-password">Forgot password?</a></p>
         </div>
       </div>
     </div>
