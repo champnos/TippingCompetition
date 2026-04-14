@@ -102,23 +102,24 @@ export async function POST(req: NextRequest) {
     const marginDiff = Math.abs(game.home_score - game.away_score)
     const isDraw = game.home_score === game.away_score
     const pickedTeamWon = !isDraw && game.winner_team_id === tip.team_id
-    const pickedTeamLost = !isDraw && game.winner_team_id !== tip.team_id
 
-    let actual_team_margin: number
     let result: string
+    let error: number
+    const predicted = tip.predicted_margin ?? 0
+    // Scoring: error = abs(predicted - actual margin diff)
+    // For a loss, error is doubled as a penalty for picking the wrong team.
+    // For a draw, error = abs(predicted) since there is no actual margin to compare against.
     if (isDraw) {
-      actual_team_margin = 0
       result = 'draw'
+      error = Math.abs(predicted)
     } else if (pickedTeamWon) {
-      actual_team_margin = marginDiff
       result = 'win'
+      error = Math.abs(predicted - marginDiff)
     } else {
-      actual_team_margin = -marginDiff
       result = 'loss'
+      error = Math.abs(predicted - marginDiff) * 2
     }
 
-    const predicted = tip.predicted_margin ?? 0
-    const error = Math.abs(predicted - actual_team_margin)
     const weighted_score = error * accuracy_factor
 
     // eslint-disable-next-line no-loop-func
@@ -148,12 +149,14 @@ export async function POST(req: NextRequest) {
 
   const totalByEntry = new Map<number, number>()
   const correctCountByEntry = new Map<number, number>()
+  const tippedCountByEntry = new Map<number, number>()
 
   for (const t of allScoredTips ?? []) {
     totalByEntry.set(t.entry_id, (totalByEntry.get(t.entry_id) ?? 0) + Number(t.final_score ?? 0))
     if (t.result === 'win') {
       correctCountByEntry.set(t.entry_id, (correctCountByEntry.get(t.entry_id) ?? 0) + 1)
     }
+    tippedCountByEntry.set(t.entry_id, (tippedCountByEntry.get(t.entry_id) ?? 0) + 1)
   }
 
   const entryUpdates: Promise<void>[] = entries.map((entry) =>
@@ -163,6 +166,7 @@ export async function POST(req: NextRequest) {
         .update({
           total_score: totalByEntry.get(entry.id) ?? 0,
           correct_tips_count: correctCountByEntry.get(entry.id) ?? 0,
+          rounds_tipped: tippedCountByEntry.get(entry.id) ?? 0,
         })
         .eq('id', entry.id)
     })()

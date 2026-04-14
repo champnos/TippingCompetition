@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { MARGIN_ELIGIBILITY_THRESHOLD } from '@/lib/margin'
 
 type Game = {
   id: number
@@ -22,6 +23,7 @@ type MarginEntry = {
   total_paid: number
   total_score: number
   correct_tips_count: number
+  rounds_tipped: number
 }
 
 type MarginTip = {
@@ -52,6 +54,7 @@ type LeaderboardRow = {
   full_name: string | null
   total_score: number
   correct_tips_count: number
+  rounds_tipped: number
   average: number
 }
 
@@ -99,7 +102,7 @@ export default async function MarginPage({
   // Get user's entry
   const { data: entryData } = await supabase
     .from('margin_entries')
-    .select('id, total_paid, total_score, correct_tips_count')
+    .select('id, total_paid, total_score, correct_tips_count, rounds_tipped')
     .eq('competition_id', competition.id)
     .eq('user_id', user.id)
     .single()
@@ -191,7 +194,7 @@ export default async function MarginPage({
   // Build leaderboard from all entries
   const { data: allEntriesData } = await supabase
     .from('margin_entries')
-    .select('id, user_id, total_score, correct_tips_count, profiles(full_name)')
+    .select('id, user_id, total_score, correct_tips_count, rounds_tipped, profiles(full_name)')
     .eq('competition_id', competition.id)
 
   type EntryWithProfile = {
@@ -199,6 +202,7 @@ export default async function MarginPage({
     user_id: string
     total_score: number
     correct_tips_count: number
+    rounds_tipped: number
     profiles: { full_name: string | null } | null
   }
 
@@ -207,13 +211,15 @@ export default async function MarginPage({
     .map((e) => {
       const totalScore = Number(e.total_score)
       const correctTips = Number(e.correct_tips_count ?? 0)
-      const average = correctTips > 0 ? totalScore / correctTips : NO_TIPS_SCORE
+      const roundsTipped = Number(e.rounds_tipped ?? 0)
+      const average = roundsTipped > 0 ? totalScore / roundsTipped : NO_TIPS_SCORE
       return {
         entry_id: e.id,
         user_id: e.user_id,
         full_name: e.profiles?.full_name ?? null,
         total_score: totalScore,
         correct_tips_count: correctTips,
+        rounds_tipped: roundsTipped,
         average,
       }
     })
@@ -242,6 +248,29 @@ export default async function MarginPage({
       {!entry && (
         <div className="section-card">
           <p>You are not enrolled in this competition. Please contact the administrator to be added.</p>
+        </div>
+      )}
+
+      {/* ── Status Card ── */}
+      {entry && (
+        <div className="section-card">
+          <div className="section-card-header">
+            <h2>Your Stats</h2>
+          </div>
+          <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+            <div>
+              <div className="form-label">Total Weighted Score</div>
+              <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{Number(entry.total_score).toFixed(0)}</div>
+            </div>
+            <div>
+              <div className="form-label">Correct Tips</div>
+              <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{Number(entry.correct_tips_count ?? 0)}</div>
+            </div>
+            <div>
+              <div className="form-label">Rounds Tipped</div>
+              <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{Number(entry.rounds_tipped ?? 0)}</div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -465,7 +494,12 @@ export default async function MarginPage({
                     <td className="center">{idx + 1}</td>
                     <td>{row.full_name ?? row.user_id}</td>
                     <td className="center">{row.total_score.toFixed(0)}</td>
-                    <td className="center">{row.correct_tips_count}</td>
+                    <td className="center">
+                      {row.correct_tips_count}
+                      {row.correct_tips_count < MARGIN_ELIGIBILITY_THRESHOLD && (
+                        <span title="Fewer than 15 correct tips" style={{ marginLeft: 4, color: 'var(--danger)' }}>⚠️</span>
+                      )}
+                    </td>
                     <td className="center" style={{ fontWeight: 700 }}>
                       {row.average === NO_TIPS_SCORE ? '—' : row.average.toFixed(1)}
                     </td>
