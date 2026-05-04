@@ -1,19 +1,15 @@
 /**
- * Returns the accuracy factor for Margin ("Closest to Pin") scoring.
- * OR + R1–4  → 1×
- * R5–9       → 2×
- * R10–14     → 3×
- * R15–19     → 4×
- * R20–24     → 5×
- *
- * "OR" (Opening Round) is treated as round 0 or any round_number ≤ 4.
+ * Returns the round multiplier for Mancini's Margin 2026 scoring.
+ * Opening Round – Round 8  → 1.0×
+ * Round 9 – Round 16       → 1.5×
+ * Round 17 – Round 23      → 2.0×
+ * Round 24                 → 3.0×
  */
 export function marginMultiplier(roundNumber: number): number {
-  if (roundNumber <= 4) return 1
-  if (roundNumber <= 9) return 2
-  if (roundNumber <= 14) return 3
-  if (roundNumber <= 19) return 4
-  return 5
+  if (roundNumber <= 8) return 1.0
+  if (roundNumber <= 16) return 1.5
+  if (roundNumber <= 23) return 2.0
+  return 3.0
 }
 
 /**
