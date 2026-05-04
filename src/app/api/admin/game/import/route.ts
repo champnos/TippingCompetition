@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData()
   const file = formData.get('csv_file') as File | null
   let seasonId = formData.get('season_id') ? Number(formData.get('season_id')) : null
+  if (seasonId !== null && isNaN(seasonId)) seasonId = null
 
   if (!file || file.size === 0) {
     return NextResponse.redirect(new URL('/admin?error=no_file', req.url))
@@ -139,9 +140,9 @@ export async function POST(req: NextRequest) {
     const match_time_str = parts[colIdx.match_time]?.trim() ?? ''
     const venue_str = colIdx.venue >= 0 ? (parts[colIdx.venue]?.trim() ?? '') : ''
 
-    // Validate round_number
+    // Validate round_number (Number('') === 0, so round_number < 1 catches empty strings too)
     const round_number = Number(round_number_str)
-    if (!round_number_str || isNaN(round_number) || !Number.isInteger(round_number) || round_number < 1) {
+    if (!Number.isInteger(round_number) || round_number < 1) {
       skipReasons.push(`Row ${rowNum}: invalid round_number "${round_number_str}"`)
       continue
     }
