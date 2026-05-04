@@ -5,7 +5,7 @@ export default async function AdminPage({
   searchParams,
 }: {
   searchParams: {
-    imported?: string; skipped?: string; skip_reasons?: string; error?: string
+    imported?: string; updated?: string; skipped?: string; skip_reasons?: string; error?: string
     result_imported?: string; result_skipped?: string; result_skip_reasons?: string
     graded?: string; comp_updated?: string; edit?: string
   }
@@ -235,9 +235,14 @@ export default async function AdminPage({
         <div className="section-card-header">
           <h2>Import Fixtures (CSV)</h2>
         </div>
-        {searchParams.imported !== undefined && (
+        {searchParams.imported !== undefined && (Number(searchParams.imported) > 0 || Number(searchParams.updated) > 0) && (
           <div style={{ background: '#f0fff4', border: '1px solid #bbf7d0', color: 'var(--success)', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
-            ✅ {searchParams.imported} fixture(s) imported successfully.
+            ✅ {searchParams.imported} fixture(s) imported, {searchParams.updated ?? 0} updated.
+          </div>
+        )}
+        {searchParams.imported !== undefined && Number(searchParams.imported) === 0 && Number(searchParams.updated) === 0 && Number(searchParams.skipped) === 0 && (
+          <div style={{ background: '#f8fafc', border: '1px solid var(--border)', color: '#555', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
+            ℹ️ No changes — all rows in the file already match existing fixtures.
           </div>
         )}
         {searchParams.skipped !== undefined && Number(searchParams.skipped) > 0 && (
@@ -245,19 +250,33 @@ export default async function AdminPage({
             ⚠️ {searchParams.skipped} row(s) skipped{searchParams.skip_reasons ? `: ${searchParams.skip_reasons}` : ''}.
           </div>
         )}
+        {searchParams.error === 'no_season' && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 6, padding: '10px 14px', marginBottom: 14 }}>
+            ❌ No season selected and no active competition found. Please select a season or set a competition as active.
+          </div>
+        )}
         <p style={{ marginBottom: 12, fontSize: '0.9rem', color: '#555' }}>
-          Upload a CSV file to bulk-import fixtures. Format: <code>round_id,home_team,away_team,match_time,venue</code>
+          Upload a CSV file to bulk-import fixtures. Required columns: <code>round_number,home_team,away_team,match_time</code>. Optional: <code>venue</code>.
           <br />
-          Teams matched by name or short_name (case-insensitive). <code>match_time</code> in ISO format (e.g. <code>2026-04-12T14:35</code>). <code>venue</code> is optional.
+          Teams matched by name or short_name (case-insensitive). <code>match_time</code> in ISO format (e.g. <code>2026-04-12T14:35</code>).
+          Re-importing will update existing games (match_time & venue) and detect round moves where the new kick-off time is within ±14 days of the original.
         </p>
         <form action="/api/admin/game/import" method="POST" encType="multipart/form-data">
           <div className="form-grid">
             <div className="form-field">
+              <label className="form-label">Season (optional — defaults to active competition)</label>
+              <select name="season_id" className="form-select" defaultValue={activeComp?.season_id ?? ''}>
+                <option value="">Use active competition season</option>
+                {(seasons ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>{s.year}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-field">
               <label className="form-label">CSV File</label>
               <input type="file" name="csv_file" accept=".csv" required className="form-input" />
             </div>
-            <div className="form-field" style={{ justifyContent: 'flex-end', gap: 10, display: 'flex', alignItems: 'flex-end' }}>
-              <a href="/api/admin/game/import" download="fixtures_template.csv" className="btn btn-sm btn-primary">Download CSV Template</a>
+            <div className="form-field" style={{ justifyContent: 'flex-end' }}>
               <button type="submit" className="btn btn-gold">Import Fixtures</button>
             </div>
           </div>

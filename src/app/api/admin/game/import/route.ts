@@ -1,30 +1,39 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
-const TEMPLATE_CSV = `round_id,home_team,away_team,match_time,venue
-1,Richmond Tigers,Collingwood,2026-04-12T14:35,MCG
-2,Carlton,Essendon,2026-04-13T16:20,MCG
-`
+// 14 days × 24 hours × 60 min × 60 sec × 1000 ms
+const RESCHEDULE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000
 
-export async function GET(req: NextRequest) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.redirect(new URL('/login', req.url))
+// Maximum number of skip-reason strings included in the redirect URL
+const MAX_SKIP_REASONS_IN_URL = 5
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.is_admin) return NextResponse.redirect(new URL('/dashboard', req.url))
-
-  return new NextResponse(TEMPLATE_CSV, {
-    headers: {
-      'Content-Type': 'text/csv',
-      'Content-Disposition': 'attachment; filename="fixtures_template.csv"',
-    },
-  })
+/**
+ * Quote-aware CSV line parser (RFC 4180 compatible).
+ * Handles commas inside quoted fields and escaped double-quotes ("").
+ */
+function parseCsvLine(line: string): string[] {
+  const fields: string[] = []
+  let current = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        // Escaped double-quote inside a quoted field
+        current += '"'
+        i++
+      } else {
+        inQuotes = !inQuotes
+      }
+    } else if (ch === ',' && !inQuotes) {
+      fields.push(current.trim())
+      current = ''
+    } else {
+      current += ch
+    }
+  }
+  fields.push(current.trim())
+  return fields
 }
 
 export async function POST(req: NextRequest) {
@@ -42,9 +51,25 @@ export async function POST(req: NextRequest) {
 
   const formData = await req.formData()
   const file = formData.get('csv_file') as File | null
+  let seasonId = formData.get('season_id') ? Number(formData.get('season_id')) : null
+  if (seasonId !== null && isNaN(seasonId)) seasonId = null
 
   if (!file || file.size === 0) {
     return NextResponse.redirect(new URL('/admin?error=no_file', req.url))
+  }
+
+  // If no season_id provided, fall back to the active competition's season
+  if (!seasonId) {
+    const { data: activeComp } = await supabase
+      .from('competitions')
+      .select('season_id')
+      .eq('is_active', true)
+      .single()
+    seasonId = activeComp?.season_id ?? null
+  }
+
+  if (!seasonId) {
+    return NextResponse.redirect(new URL('/admin?error=no_season', req.url))
   }
 
   const text = await file.text()
@@ -54,106 +79,183 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(new URL('/admin?error=empty_csv', req.url))
   }
 
-  // Skip header row
+  // Parse and validate header row
+  const header = parseCsvLine(lines[0]).map((h) => h.toLowerCase())
+  const requiredCols = ['round_number', 'home_team', 'away_team', 'match_time']
+  for (const col of requiredCols) {
+    if (!header.includes(col)) {
+      return NextResponse.redirect(new URL(`/admin?error=missing_col_${col}`, req.url))
+    }
+  }
+
+  const colIdx = {
+    round_number: header.indexOf('round_number'),
+    home_team: header.indexOf('home_team'),
+    away_team: header.indexOf('away_team'),
+    match_time: header.indexOf('match_time'),
+    venue: header.indexOf('venue'),
+  }
+
   const dataLines = lines.slice(1)
 
-  // Fetch all teams and rounds for lookup
+  // Fetch teams and rounds for the given season
   const [{ data: teams }, { data: rounds }] = await Promise.all([
     supabase.from('teams').select('id, name, short_name'),
-    supabase.from('rounds').select('id'),
+    supabase.from('rounds').select('id, round_number').eq('season_id', seasonId),
   ])
 
   const teamList = teams ?? []
-  const roundIds = new Set((rounds ?? []).map((r) => r.id))
 
-  const toInsert: {
-    round_id: number
-    home_team_id: number
-    away_team_id: number
-    match_time: string
-    venue: string | null
-  }[] = []
+  // Build round_number → round_id lookup for this season
+  const roundByNumber = new Map<number, number>()
+  for (const r of rounds ?? []) {
+    roundByNumber.set(r.round_number, r.id)
+  }
+  const seasonRoundIds = (rounds ?? []).map((r) => r.id)
 
+  // Fetch existing games for this season to power upsert logic
+  type ExistingGame = { id: number; round_id: number; home_team_id: number; away_team_id: number; match_time: string }
+  const existingGames: ExistingGame[] = seasonRoundIds.length > 0
+    ? ((await supabase
+        .from('games')
+        .select('id, round_id, home_team_id, away_team_id, match_time')
+        .in('round_id', seasonRoundIds)).data ?? []) as ExistingGame[]
+    : []
+
+  // Track games inserted within this CSV run (key: "roundId:homeId:awayId") to prevent
+  // duplicate inserts when the same matchup appears more than once in the file.
+  const insertedKeys = new Set<string>()
+
+  let imported = 0
+  let updated = 0
   const skipReasons: string[] = []
 
   for (let i = 0; i < dataLines.length; i++) {
-    const line = dataLines[i]
-    const parts = line.split(',')
+    const parts = parseCsvLine(dataLines[i])
+    const rowNum = i + 2
 
-    if (parts.length < 4) {
-      skipReasons.push(`Row ${i + 2}: not enough columns`)
+    const round_number_str = parts[colIdx.round_number]?.trim() ?? ''
+    const home_team_str = parts[colIdx.home_team]?.trim() ?? ''
+    const away_team_str = parts[colIdx.away_team]?.trim() ?? ''
+    const match_time_str = parts[colIdx.match_time]?.trim() ?? ''
+    const venue_str = colIdx.venue >= 0 ? (parts[colIdx.venue]?.trim() ?? '') : ''
+
+    // Validate round_number (Number('') === 0, so round_number < 1 catches empty strings too)
+    const round_number = Number(round_number_str)
+    if (!Number.isInteger(round_number) || round_number < 1) {
+      skipReasons.push(`Row ${rowNum}: invalid round_number "${round_number_str}"`)
+      continue
+    }
+    const round_id = roundByNumber.get(round_number)
+    if (!round_id) {
+      skipReasons.push(`Row ${rowNum}: round ${round_number} not found in season`)
       continue
     }
 
-    const round_id = Number(parts[0].trim())
-    const home_team_str = parts[1].trim()
-    const away_team_str = parts[2].trim()
-    const match_time = parts[3].trim()
-    const venue = parts.slice(4).join(',').trim() || null
-
-    if (!round_id || isNaN(round_id)) {
-      skipReasons.push(`Row ${i + 2}: invalid round_id "${parts[0].trim()}"`)
-      continue
-    }
-
-    if (!roundIds.has(round_id)) {
-      skipReasons.push(`Row ${i + 2}: round_id ${round_id} not found`)
-      continue
-    }
-
+    // Validate teams
     const homeTeam = teamList.find(
       (t) =>
         t.name.toLowerCase() === home_team_str.toLowerCase() ||
         (t.short_name && t.short_name.toLowerCase() === home_team_str.toLowerCase()),
     )
     if (!homeTeam) {
-      skipReasons.push(`Row ${i + 2}: home team "${home_team_str}" not found`)
+      skipReasons.push(`Row ${rowNum}: home team "${home_team_str}" not found`)
       continue
     }
-
     const awayTeam = teamList.find(
       (t) =>
         t.name.toLowerCase() === away_team_str.toLowerCase() ||
         (t.short_name && t.short_name.toLowerCase() === away_team_str.toLowerCase()),
     )
     if (!awayTeam) {
-      skipReasons.push(`Row ${i + 2}: away team "${away_team_str}" not found`)
+      skipReasons.push(`Row ${rowNum}: away team "${away_team_str}" not found`)
       continue
     }
 
-    if (!match_time) {
-      skipReasons.push(`Row ${i + 2}: missing match_time`)
+    // Validate match_time
+    if (!match_time_str) {
+      skipReasons.push(`Row ${rowNum}: missing match_time`)
+      continue
+    }
+    const matchTimeDate = new Date(match_time_str)
+    if (isNaN(matchTimeDate.getTime())) {
+      skipReasons.push(`Row ${rowNum}: invalid match_time "${match_time_str}"`)
       continue
     }
 
-    toInsert.push({
+    const venue = venue_str || null
+
+    // Upsert logic
+    // 1. Exact match: same round + home_team + away_team → update match_time & venue
+    const exactMatch = existingGames.find(
+      (g) => g.round_id === round_id && g.home_team_id === homeTeam.id && g.away_team_id === awayTeam.id,
+    )
+    if (exactMatch) {
+      const { error } = await supabase
+        .from('games')
+        .update({ match_time: match_time_str, venue })
+        .eq('id', exactMatch.id)
+      if (error) {
+        skipReasons.push(`Row ${rowNum}: update failed — ${error.message}`)
+      } else {
+        exactMatch.match_time = match_time_str
+        updated++
+      }
+      continue
+    }
+
+    // 2. Reschedule: same home/away in the season, match_time within ±14-day window
+    //    → update round_id + match_time + venue on the existing game
+    const rescheduleMatch = existingGames.find((g) => {
+      if (g.home_team_id !== homeTeam.id || g.away_team_id !== awayTeam.id) return false
+      const diff = Math.abs(new Date(g.match_time).getTime() - matchTimeDate.getTime())
+      return diff <= RESCHEDULE_WINDOW_MS
+    })
+    if (rescheduleMatch) {
+      const { error } = await supabase
+        .from('games')
+        .update({ round_id, match_time: match_time_str, venue })
+        .eq('id', rescheduleMatch.id)
+      if (error) {
+        skipReasons.push(`Row ${rowNum}: reschedule update failed — ${error.message}`)
+      } else {
+        rescheduleMatch.round_id = round_id
+        rescheduleMatch.match_time = match_time_str
+        updated++
+      }
+      continue
+    }
+
+    // 3. Insert new game
+    const insertKey = `${round_id}:${homeTeam.id}:${awayTeam.id}`
+    if (insertedKeys.has(insertKey)) {
+      skipReasons.push(`Row ${rowNum}: duplicate row (same round/home/away already processed in this file)`)
+      continue
+    }
+    const { error } = await supabase.from('games').insert({
       round_id,
       home_team_id: homeTeam.id,
       away_team_id: awayTeam.id,
-      match_time,
+      match_time: match_time_str,
       venue,
     })
-  }
-
-  let imported = 0
-  if (toInsert.length > 0) {
-    const { error } = await supabase.from('games').insert(toInsert)
-    if (!error) {
-      imported = toInsert.length
+    if (error) {
+      skipReasons.push(`Row ${rowNum}: insert failed — ${error.message}`)
     } else {
-      for (let i = 0; i < toInsert.length; i++) {
-        skipReasons.push(`Valid row #${i + 1}: insert failed — ${error.message}`)
-      }
+      insertedKeys.add(insertKey)
+      imported++
     }
   }
 
   const skipped = skipReasons.length
   const params = new URLSearchParams({
     imported: String(imported),
+    updated: String(updated),
     skipped: String(skipped),
   })
   if (skipped > 0) {
-    params.set('skip_reasons', skipReasons.join(' | '))
+    // Limit reasons to first 5 to keep URL length manageable
+    params.set('skip_reasons', skipReasons.slice(0, MAX_SKIP_REASONS_IN_URL).join(' | '))
   }
 
   return NextResponse.redirect(new URL(`/admin?${params.toString()}`, req.url))
