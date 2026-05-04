@@ -254,7 +254,7 @@ export default async function AdminPage({
           Upload a CSV file to bulk-import fixtures. Required columns: <code>round_number,home_team,away_team,match_time</code>. Optional: <code>venue</code>.
           <br />
           Teams matched by name or short_name (case-insensitive). <code>match_time</code> in ISO format (e.g. <code>2026-04-12T14:35</code>).
-          Re-importing will update existing games (match_time &amp; venue) and detect round moves within a 14-day window.
+          Re-importing will update existing games (match_time &amp; venue) and detect round moves where the new kick-off time is within ±14 days of the original.
         </p>
         <form action="/api/admin/game/import" method="POST" encType="multipart/form-data">
           <div className="form-grid">

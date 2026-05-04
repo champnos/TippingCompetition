@@ -1,10 +1,16 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Window for detecting a rescheduled game (14 days in ms)
+// 14 days × 24 hours × 60 min × 60 sec × 1000 ms
 const RESCHEDULE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000
 
-/** Quote-aware CSV line parser that handles fields containing commas. */
+// Maximum number of skip-reason strings included in the redirect URL
+const MAX_SKIP_REASONS_IN_URL = 5
+
+/**
+ * Quote-aware CSV line parser (RFC 4180 compatible).
+ * Handles commas inside quoted fields and escaped double-quotes ("").
+ */
 function parseCsvLine(line: string): string[] {
   const fields: string[] = []
   let current = ''
@@ -12,7 +18,13 @@ function parseCsvLine(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i]
     if (ch === '"') {
-      inQuotes = !inQuotes
+      if (inQuotes && line[i + 1] === '"') {
+        // Escaped double-quote inside a quoted field
+        current += '"'
+        i++
+      } else {
+        inQuotes = !inQuotes
+      }
     } else if (ch === ',' && !inQuotes) {
       fields.push(current.trim())
       current = ''
@@ -109,6 +121,10 @@ export async function POST(req: NextRequest) {
         .in('round_id', seasonRoundIds)).data ?? []) as ExistingGame[]
     : []
 
+  // Track games inserted within this CSV run (key: "roundId:homeId:awayId") to prevent
+  // duplicate inserts when the same matchup appears more than once in the file.
+  const insertedKeys = new Set<string>()
+
   let imported = 0
   let updated = 0
   const skipReasons: string[] = []
@@ -187,7 +203,8 @@ export async function POST(req: NextRequest) {
       continue
     }
 
-    // 2. Reschedule: same home/away in the season, match_time within 14-day window → update round + time + venue
+    // 2. Reschedule: same home/away in the season, match_time within ±14-day window
+    //    → update round_id + match_time + venue on the existing game
     const rescheduleMatch = existingGames.find((g) => {
       if (g.home_team_id !== homeTeam.id || g.away_team_id !== awayTeam.id) return false
       const diff = Math.abs(new Date(g.match_time).getTime() - matchTimeDate.getTime())
@@ -209,6 +226,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Insert new game
+    const insertKey = `${round_id}:${homeTeam.id}:${awayTeam.id}`
+    if (insertedKeys.has(insertKey)) {
+      skipReasons.push(`Row ${rowNum}: duplicate row (same round/home/away already processed in this file)`)
+      continue
+    }
     const { error } = await supabase.from('games').insert({
       round_id,
       home_team_id: homeTeam.id,
@@ -219,8 +241,7 @@ export async function POST(req: NextRequest) {
     if (error) {
       skipReasons.push(`Row ${rowNum}: insert failed — ${error.message}`)
     } else {
-      // Track in memory to prevent duplicate inserts within the same CSV
-      existingGames.push({ id: -1, round_id, home_team_id: homeTeam.id, away_team_id: awayTeam.id, match_time: match_time_str })
+      insertedKeys.add(insertKey)
       imported++
     }
   }
@@ -233,7 +254,7 @@ export async function POST(req: NextRequest) {
   })
   if (skipped > 0) {
     // Limit reasons to first 5 to keep URL length manageable
-    params.set('skip_reasons', skipReasons.slice(0, 5).join(' | '))
+    params.set('skip_reasons', skipReasons.slice(0, MAX_SKIP_REASONS_IN_URL).join(' | '))
   }
 
   return NextResponse.redirect(new URL(`/admin?${params.toString()}`, req.url))
