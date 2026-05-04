@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(new URL('/admin/margin?error=round_not_found', req.url))
   }
 
-  const accuracy_factor = marginMultiplier(round.round_number)
+  const multiplier = marginMultiplier(round.round_number)
 
   // Get all games in this round with scores
   const { data: games } = await supabase
@@ -74,10 +74,10 @@ export async function POST(req: NextRequest) {
 
   const entryIds = entries.map((e) => e.id)
 
-  // Get all existing margin_tips for this round in this competition (one per entry)
+  // Get all existing margin_tips for this round
   const { data: tipsData } = await supabase
     .from('margin_tips')
-    .select('id, entry_id, game_id, team_id, predicted_margin')
+    .select('id, entry_id, game_id, team_id')
     .eq('round_id', round_id)
     .in('entry_id', entryIds)
 
@@ -86,56 +86,105 @@ export async function POST(req: NextRequest) {
     entry_id: number
     game_id: number
     team_id: number | null
-    predicted_margin: number | null
   }
 
   const tips = (tipsData ?? []) as TipRow[]
 
-  // Process each tip
-  const tipUpdates: Promise<void>[] = []
+  // Group tips by entry_id
+  const tipsByEntry = new Map<number, TipRow[]>()
   for (const tip of tips) {
-    const game = gameById.get(tip.game_id)
-
-    // Skip if game has no scores yet
-    if (!game || game.home_score === null || game.away_score === null) continue
-
-    const marginDiff = Math.abs(game.home_score - game.away_score)
-    const isDraw = game.home_score === game.away_score
-    const pickedTeamWon = !isDraw && game.winner_team_id === tip.team_id
-    const pickedTeamLost = !isDraw && game.winner_team_id !== tip.team_id
-
-    let actual_team_margin: number
-    let result: string
-    if (isDraw) {
-      actual_team_margin = 0
-      result = 'draw'
-    } else if (pickedTeamWon) {
-      actual_team_margin = marginDiff
-      result = 'win'
-    } else {
-      actual_team_margin = -marginDiff
-      result = 'loss'
-    }
-
-    const predicted = tip.predicted_margin ?? 0
-    const error = Math.abs(predicted - actual_team_margin)
-    const weighted_score = error * accuracy_factor
-
-    // eslint-disable-next-line no-loop-func
-    tipUpdates.push(
-      (async () => {
-        await supabase
-          .from('margin_tips')
-          .update({
-            raw_score: error,
-            multiplier: accuracy_factor,
-            final_score: weighted_score,
-            result,
-          })
-          .eq('id', tip.id)
-      })()
-    )
+    if (!tipsByEntry.has(tip.entry_id)) tipsByEntry.set(tip.entry_id, [])
+    tipsByEntry.get(tip.entry_id)!.push(tip)
   }
+
+  // Score each tip and handle no-tip penalty
+  const tipUpdates: Promise<void>[] = []
+  const roundScoreByEntry = new Map<number, number>()
+  const correctCountByEntry = new Map<number, number>()
+
+  for (const entry of entries) {
+    const entryTips = tipsByEntry.get(entry.id) ?? []
+
+    if (entryTips.length === 0) {
+      // No tips submitted for the round — flat -50 penalty (no multiplier)
+      roundScoreByEntry.set(entry.id, -50)
+
+      // Insert a no_tip sentinel row using the first game in the round
+      const firstGameId = games[0].id
+      tipUpdates.push(
+        (async () => {
+          await supabase
+            .from('margin_tips')
+            .upsert(
+              {
+                entry_id: entry.id,
+                game_id: firstGameId,
+                round_id,
+                team_id: null,
+                raw_score: -50,
+                multiplier: 1,
+                final_score: -50,
+                result: 'no_tip',
+              },
+              { onConflict: 'entry_id,game_id' }
+            )
+        })()
+      )
+    } else {
+      // Calculate base_round_score from all tipped games
+      let base_round_score = 0
+      let correctTips = 0
+
+      for (const tip of entryTips) {
+        const game = gameById.get(tip.game_id)
+
+        // Skip if game has no scores yet
+        if (!game || game.home_score === null || game.away_score === null) continue
+
+        const marginDiff = Math.abs(game.home_score - game.away_score)
+        const isDraw = game.home_score === game.away_score
+
+        let raw_score: number
+        let result: string
+
+        if (isDraw) {
+          raw_score = 0
+          result = 'draw'
+        } else if (game.winner_team_id === tip.team_id) {
+          // Picked team won — positive margin
+          raw_score = marginDiff
+          result = 'win'
+          correctTips++
+        } else {
+          // Picked team lost — negative margin
+          raw_score = -marginDiff
+          result = 'loss'
+        }
+
+        const final_score = raw_score * multiplier
+        base_round_score += raw_score
+
+        // eslint-disable-next-line no-loop-func
+        tipUpdates.push(
+          (async (t, rs, fs, r) => {
+            await supabase
+              .from('margin_tips')
+              .update({
+                raw_score: rs,
+                multiplier,
+                final_score: fs,
+                result: r,
+              })
+              .eq('id', t.id)
+          })(tip, raw_score, final_score, result)
+        )
+      }
+
+      roundScoreByEntry.set(entry.id, base_round_score * multiplier)
+      correctCountByEntry.set(entry.id, correctTips)
+    }
+  }
+
   await Promise.all(tipUpdates)
 
   // Recalculate total_score and correct_tips_count for all entries from all scored tips
@@ -144,15 +193,20 @@ export async function POST(req: NextRequest) {
     .select('entry_id, final_score, result')
     .in('entry_id', entryIds)
     .not('result', 'is', null)
-    .not('result', 'in', '("pending","no_tip")')
+    .neq('result', 'pending')
 
   const totalByEntry = new Map<number, number>()
-  const correctCountByEntry = new Map<number, number>()
+  const totalCorrectByEntry = new Map<number, number>()
 
   for (const t of allScoredTips ?? []) {
-    totalByEntry.set(t.entry_id, (totalByEntry.get(t.entry_id) ?? 0) + Number(t.final_score ?? 0))
-    if (t.result === 'win') {
-      correctCountByEntry.set(t.entry_id, (correctCountByEntry.get(t.entry_id) ?? 0) + 1)
+    if (t.result === 'no_tip') {
+      // no_tip row carries the -50 flat penalty
+      totalByEntry.set(t.entry_id, (totalByEntry.get(t.entry_id) ?? 0) + Number(t.final_score ?? 0))
+    } else {
+      totalByEntry.set(t.entry_id, (totalByEntry.get(t.entry_id) ?? 0) + Number(t.final_score ?? 0))
+      if (t.result === 'win') {
+        totalCorrectByEntry.set(t.entry_id, (totalCorrectByEntry.get(t.entry_id) ?? 0) + 1)
+      }
     }
   }
 
@@ -162,7 +216,7 @@ export async function POST(req: NextRequest) {
         .from('margin_entries')
         .update({
           total_score: totalByEntry.get(entry.id) ?? 0,
-          correct_tips_count: correctCountByEntry.get(entry.id) ?? 0,
+          correct_tips_count: totalCorrectByEntry.get(entry.id) ?? 0,
         })
         .eq('id', entry.id)
     })()

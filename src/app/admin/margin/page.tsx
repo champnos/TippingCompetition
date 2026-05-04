@@ -2,8 +2,6 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { marginPrizes } from '@/lib/margin'
 
-const NO_TIPS_SCORE = 9999
-
 type MarginEntry = {
   id: number
   competition_id: number
@@ -20,8 +18,6 @@ type LeaderboardRow = {
   user_id: string
   full_name: string | null
   total_score: number
-  correct_tips_count: number
-  average: number
 }
 
 export default async function AdminMarginPage({
@@ -81,20 +77,13 @@ export default async function AdminMarginPage({
     entries = (entriesData ?? []) as unknown as MarginEntry[]
 
     leaderboard = [...entries]
-      .map((e) => {
-        const totalScore = Number(e.total_score)
-        const correctTips = Number(e.correct_tips_count ?? 0)
-        const average = correctTips > 0 ? totalScore / correctTips : NO_TIPS_SCORE
-        return {
-          entry_id: e.id,
-          user_id: e.user_id,
-          full_name: e.profiles?.full_name ?? null,
-          total_score: totalScore,
-          correct_tips_count: correctTips,
-          average,
-        }
-      })
-      .sort((a, b) => a.average - b.average)
+      .map((e) => ({
+        entry_id: e.id,
+        user_id: e.user_id,
+        full_name: e.profiles?.full_name ?? null,
+        total_score: Number(e.total_score),
+      }))
+      .sort((a, b) => b.total_score - a.total_score)
   }
 
   const entryFee = Number(competition?.entry_fee ?? 40)
@@ -140,7 +129,7 @@ export default async function AdminMarginPage({
           </div>
           <p style={{ marginBottom: 16 }}>
             After entering game scores in the main Admin panel, process Margin results here to award points.
-            Score = ABS(predicted margin − actual team margin) × accuracy factor. No tip = skipped entirely.
+            Score = sum of actual margins (win = positive, loss = negative) × round multiplier. No tips submitted = −50 flat.
           </p>
           <form action="/api/admin/margin/result" method="POST">
             <input type="hidden" name="competition_id" value={competition.id} />
@@ -210,7 +199,7 @@ export default async function AdminMarginPage({
                   <tr>
                     <th>Name</th>
                     <th className="center">Total Paid</th>
-                    <th className="center">Total Weighted</th>
+                    <th className="center">Total Score</th>
                     <th className="center">Correct Tips</th>
                   </tr>
                 </thead>
@@ -269,7 +258,7 @@ export default async function AdminMarginPage({
         <div className="section-card">
           <div className="section-card-header">
             <h2>Leaderboard</h2>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Lower average = better</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Higher total = better</span>
           </div>
           <div className="table-wrap">
             <table className="afl-table">
@@ -277,9 +266,7 @@ export default async function AdminMarginPage({
                 <tr>
                   <th>#</th>
                   <th>Name</th>
-                  <th className="center">Total Weighted</th>
-                  <th className="center">Correct Tips</th>
-                  <th className="center">Average</th>
+                  <th className="center">Total Score</th>
                 </tr>
               </thead>
               <tbody>
@@ -290,11 +277,7 @@ export default async function AdminMarginPage({
                   >
                     <td className="center">{idx + 1}</td>
                     <td>{row.full_name ?? row.user_id}</td>
-                    <td className="center">{row.total_score.toFixed(0)}</td>
-                    <td className="center">{row.correct_tips_count}</td>
-                    <td className="center" style={{ fontWeight: 700 }}>
-                      {row.average === NO_TIPS_SCORE ? '—' : row.average.toFixed(1)}
-                    </td>
+                    <td className="center" style={{ fontWeight: 700 }}>{row.total_score.toFixed(0)}</td>
                   </tr>
                 ))}
               </tbody>

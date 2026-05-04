@@ -29,7 +29,6 @@ type MarginTip = {
   game_id: number
   round_id: number
   team_id: number | null
-  predicted_margin: number | null
   raw_score: number | null
   multiplier: number | null
   final_score: number | null
@@ -51,11 +50,7 @@ type LeaderboardRow = {
   user_id: string
   full_name: string | null
   total_score: number
-  correct_tips_count: number
-  average: number
 }
-
-const NO_TIPS_SCORE = 9999
 
 const ERROR_MESSAGES: Record<string, string> = {
   missing_fields: 'Please fill in all required fields.',
@@ -139,19 +134,17 @@ export default async function MarginPage({
   const sortedRounds = [...roundMap.values()].sort((a, b) => a.round_number - b.round_number)
   const currentRound = sortedRounds.find((r) => !r.locked) ?? null
 
-  // Get existing tip for the current round (one tip per round)
-  let currentTip: { game_id: number; team_id: number; predicted_margin: number | null } | null = null
+  // Get existing tips for the current round (one per game)
+  const existingTipsByGame = new Map<number, number>() // game_id -> team_id
   if (entry && currentRound) {
-    const { data: tipData } = await supabase
+    const { data: currentTipsData } = await supabase
       .from('margin_tips')
-      .select('game_id, team_id, predicted_margin')
+      .select('game_id, team_id')
       .eq('entry_id', entry.id)
       .eq('round_id', currentRound.round_id)
-      .limit(1)
-      .maybeSingle()
 
-    if (tipData && tipData.team_id) {
-      currentTip = tipData as { game_id: number; team_id: number; predicted_margin: number | null }
+    for (const t of currentTipsData ?? []) {
+      if (t.team_id) existingTipsByGame.set(t.game_id, t.team_id)
     }
   }
 
@@ -161,7 +154,7 @@ export default async function MarginPage({
     const { data: tipsData } = await supabase
       .from('margin_tips')
       .select(`
-        id, game_id, round_id, team_id, predicted_margin, raw_score, multiplier, final_score, result,
+        id, game_id, round_id, team_id, raw_score, multiplier, final_score, result,
         games!inner(
           home_team_id, away_team_id, home_score, away_score,
           home_team:teams!games_home_team_id_fkey(name, short_name),
@@ -173,7 +166,6 @@ export default async function MarginPage({
       .eq('entry_id', entry.id)
       .not('result', 'is', null)
       .neq('result', 'pending')
-      .neq('result', 'no_tip')
       .order('round_id', { ascending: true })
 
     scoredTips = (tipsData ?? []) as unknown as MarginTip[]
@@ -191,33 +183,25 @@ export default async function MarginPage({
   // Build leaderboard from all entries
   const { data: allEntriesData } = await supabase
     .from('margin_entries')
-    .select('id, user_id, total_score, correct_tips_count, profiles(full_name)')
+    .select('id, user_id, total_score, profiles(full_name)')
     .eq('competition_id', competition.id)
 
   type EntryWithProfile = {
     id: number
     user_id: string
     total_score: number
-    correct_tips_count: number
     profiles: { full_name: string | null } | null
   }
 
   const allEntries = (allEntriesData ?? []) as unknown as EntryWithProfile[]
   const leaderboard: LeaderboardRow[] = allEntries
-    .map((e) => {
-      const totalScore = Number(e.total_score)
-      const correctTips = Number(e.correct_tips_count ?? 0)
-      const average = correctTips > 0 ? totalScore / correctTips : NO_TIPS_SCORE
-      return {
-        entry_id: e.id,
-        user_id: e.user_id,
-        full_name: e.profiles?.full_name ?? null,
-        total_score: totalScore,
-        correct_tips_count: correctTips,
-        average,
-      }
-    })
-    .sort((a, b) => a.average - b.average)
+    .map((e) => ({
+      entry_id: e.id,
+      user_id: e.user_id,
+      full_name: e.profiles?.full_name ?? null,
+      total_score: Number(e.total_score),
+    }))
+    .sort((a, b) => b.total_score - a.total_score)
 
   const errorMsg = searchParams.error ? ERROR_MESSAGES[searchParams.error] ?? searchParams.error : null
   const savedMsg = searchParams.saved ? 'Tip saved successfully!' : null
@@ -249,16 +233,16 @@ export default async function MarginPage({
       {entry && currentRound && (
         <div className="section-card">
           <div className="section-card-header">
-            <h2>Round {currentRound.round_number} — Submit Tip</h2>
+            <h2>Round {currentRound.round_number} — Submit Tips</h2>
           </div>
           <p style={{ marginBottom: 16, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            Pick <strong>one game</strong> this round. Choose a team and enter your predicted winning margin.
-            Lower average error = better rank. No tip this round is fine — it won&apos;t count against you.
+            Tip the winner for <strong>every game</strong> this round. Win = +margin, Loss = −margin.
+            Miss the whole round and you get <strong>−50 points</strong>.
           </p>
 
-          {currentTip && (
+          {existingTipsByGame.size > 0 && (
             <div style={{ marginBottom: 16, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, fontSize: '0.9rem' }}>
-              ✅ You have a tip this round. Submit a new one below to replace it.
+              ✅ You have {existingTipsByGame.size} of {currentRound.games.length} game{currentRound.games.length !== 1 ? 's' : ''} tipped this round.
             </div>
           )}
 
@@ -267,7 +251,7 @@ export default async function MarginPage({
               weekday: 'short', day: 'numeric', month: 'short',
               hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Melbourne',
             })
-            const isThisGame = currentTip?.game_id === game.id
+            const tippedTeamId = existingTipsByGame.get(game.id) ?? null
             return (
               <div key={game.id} className="game-card" style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
@@ -277,7 +261,7 @@ export default async function MarginPage({
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                     {matchDate}{game.venue ? ` @ ${game.venue}` : ''}
                   </span>
-                  {isThisGame && <span className="badge-tipped">✓ Tipped</span>}
+                  {tippedTeamId && <span className="badge-tipped">✓ Tipped</span>}
                 </div>
 
                 <form action="/api/margin/tip" method="POST">
@@ -294,7 +278,7 @@ export default async function MarginPage({
                             type="radio"
                             name="team_id"
                             value={game.home_team_id}
-                            defaultChecked={isThisGame && currentTip?.team_id === game.home_team_id}
+                            defaultChecked={tippedTeamId === game.home_team_id}
                             required
                           />
                           {game.home_team.short_name ?? game.home_team.name}
@@ -304,29 +288,16 @@ export default async function MarginPage({
                             type="radio"
                             name="team_id"
                             value={game.away_team_id}
-                            defaultChecked={isThisGame && currentTip?.team_id === game.away_team_id}
+                            defaultChecked={tippedTeamId === game.away_team_id}
                           />
                           {game.away_team.short_name ?? game.away_team.name}
                         </label>
                       </div>
                     </div>
 
-                    <div className="form-field">
-                      <label className="form-label">Predicted winning margin</label>
-                      <input
-                        type="number"
-                        name="predicted_margin"
-                        min={0}
-                        placeholder="e.g. 15"
-                        className="form-input"
-                        defaultValue={isThisGame && currentTip?.predicted_margin != null ? currentTip.predicted_margin : ''}
-                        required
-                      />
-                    </div>
-
                     <div className="form-field" style={{ justifyContent: 'flex-end' }}>
                       <button type="submit" className="btn btn-gold btn-sm">
-                        {isThisGame ? '🔄 Update Tip' : '💾 Tip This Game'}
+                        {tippedTeamId ? '🔄 Update Tip' : '💾 Tip This Game'}
                       </button>
                     </div>
                   </div>
@@ -348,87 +319,90 @@ export default async function MarginPage({
         <>
           {sortedScoredRoundNumbers.map((rn) => {
             const roundTips = tipsByRound.get(rn) ?? []
-            const factor = roundTips[0]?.multiplier ?? null
+            const multiplier = roundTips[0]?.multiplier ?? null
+            // Compute round total from final_score values (works for both normal and no_tip)
+            const roundTotal = roundTips.reduce((sum, t) => sum + Number(t.final_score ?? 0), 0)
+            const isNoTipRound = roundTips.length === 1 && roundTips[0].result === 'no_tip'
 
             return (
               <div key={rn} className="section-card">
                 <div className="section-card-header">
                   <h2>Round {rn}</h2>
-                  {factor !== null && (
+                  {multiplier !== null && !isNoTipRound && (
                     <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                      Accuracy factor ×{factor}
+                      Round multiplier ×{multiplier}
                     </span>
                   )}
                 </div>
-                <div className="table-wrap">
-                  <table className="afl-table">
-                    <thead>
-                      <tr>
-                        <th>Game</th>
-                        <th>Team Picked</th>
-                        <th className="center">Predicted</th>
-                        <th className="center">Actual</th>
-                        <th className="center">Error</th>
-                        <th className="center">Factor</th>
-                        <th className="center">Weighted</th>
-                        <th className="center">Result</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {roundTips.map((t) => {
-                        const marginDiff = t.games.home_score !== null && t.games.away_score !== null
-                          ? Math.abs(t.games.home_score - t.games.away_score)
-                          : null
-                        let actualTeamMargin: number | null = null
-                        if (marginDiff !== null) {
-                          if (t.result === 'win') actualTeamMargin = marginDiff
-                          else if (t.result === 'loss') actualTeamMargin = -marginDiff
-                          else if (t.result === 'draw') actualTeamMargin = 0
-                        }
-                        return (
-                          <tr key={t.id}>
-                            <td style={{ fontSize: '0.85rem' }}>
-                              {t.games.home_team.short_name ?? t.games.home_team.name} vs{' '}
-                              {t.games.away_team.short_name ?? t.games.away_team.name}
-                              {t.games.home_score !== null && t.games.away_score !== null && (
-                                <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>
-                                  ({t.games.home_score}–{t.games.away_score})
-                                </span>
-                              )}
-                            </td>
-                            <td>
-                              {t.team
-                                ? (t.team.short_name ?? t.team.name)
-                                : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                            </td>
-                            <td className="center">
-                              {t.predicted_margin != null ? `${t.predicted_margin}` : '—'}
-                            </td>
-                            <td className="center">
-                              {actualTeamMargin !== null
-                                ? (actualTeamMargin >= 0 ? `+${actualTeamMargin}` : `${actualTeamMargin}`)
-                                : '—'}
-                            </td>
-                            <td className="center">
-                              {t.raw_score != null ? Number(t.raw_score).toFixed(0) : '—'}
-                            </td>
-                            <td className="center">
-                              {t.multiplier != null ? `×${t.multiplier}` : '—'}
-                            </td>
-                            <td className="center" style={{ fontWeight: 600 }}>
-                              {t.final_score != null ? Number(t.final_score).toFixed(0) : '—'}
-                            </td>
-                            <td className="center">
-                              {t.result === 'win' && <span style={{ color: 'var(--success)' }}>✅ Win</span>}
-                              {t.result === 'loss' && <span style={{ color: 'var(--danger)' }}>❌ Loss</span>}
-                              {t.result === 'draw' && <span style={{ color: 'var(--text-muted)' }}>🤝 Draw</span>}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+
+                {isNoTipRound ? (
+                  <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, color: 'var(--danger)' }}>
+                    ❌ No tips submitted — Round score: <strong>−50</strong>
+                  </div>
+                ) : (
+                  <div className="table-wrap">
+                    <table className="afl-table">
+                      <thead>
+                        <tr>
+                          <th>Game</th>
+                          <th>Team Picked</th>
+                          <th className="center">Score</th>
+                          <th className="center">×</th>
+                          <th className="center">Weighted</th>
+                          <th className="center">Result</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {roundTips.map((t) => {
+                          const rawScore = t.raw_score != null ? Number(t.raw_score) : null
+                          return (
+                            <tr key={t.id}>
+                              <td style={{ fontSize: '0.85rem' }}>
+                                {t.games.home_team.short_name ?? t.games.home_team.name} vs{' '}
+                                {t.games.away_team.short_name ?? t.games.away_team.name}
+                                {t.games.home_score !== null && t.games.away_score !== null && (
+                                  <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>
+                                    ({t.games.home_score}–{t.games.away_score})
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                {t.team
+                                  ? (t.team.short_name ?? t.team.name)
+                                  : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                              </td>
+                              <td className="center" style={{ color: rawScore != null ? (rawScore >= 0 ? 'var(--success)' : 'var(--danger)') : undefined }}>
+                                {rawScore != null
+                                  ? (rawScore >= 0 ? `+${rawScore.toFixed(0)}` : rawScore.toFixed(0))
+                                  : '—'}
+                              </td>
+                              <td className="center">
+                                {t.multiplier != null ? `×${t.multiplier}` : '—'}
+                              </td>
+                              <td className="center" style={{ fontWeight: 600 }}>
+                                {t.final_score != null ? Number(t.final_score).toFixed(0) : '—'}
+                              </td>
+                              <td className="center">
+                                {t.result === 'win' && <span style={{ color: 'var(--success)' }}>✅ Win</span>}
+                                {t.result === 'loss' && <span style={{ color: 'var(--danger)' }}>❌ Loss</span>}
+                                {t.result === 'draw' && <span style={{ color: 'var(--text-muted)' }}>🤝 Draw</span>}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)' }}>
+                          <td colSpan={4} style={{ textAlign: 'right', paddingRight: 8 }}>Round Total</td>
+                          <td className="center" style={{ color: roundTotal >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                            {roundTotal >= 0 ? `+${roundTotal.toFixed(0)}` : roundTotal.toFixed(0)}
+                          </td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -440,7 +414,7 @@ export default async function MarginPage({
         <div className="section-card">
           <div className="section-card-header">
             <h2>Leaderboard</h2>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Lower average = better</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Higher total = better</span>
           </div>
           <div className="table-wrap">
             <table className="afl-table">
@@ -448,9 +422,7 @@ export default async function MarginPage({
                 <tr>
                   <th>#</th>
                   <th>Name</th>
-                  <th className="center">Total Weighted</th>
-                  <th className="center">Correct Tips</th>
-                  <th className="center">Average</th>
+                  <th className="center">Total Score</th>
                 </tr>
               </thead>
               <tbody>
@@ -464,11 +436,7 @@ export default async function MarginPage({
                   >
                     <td className="center">{idx + 1}</td>
                     <td>{row.full_name ?? row.user_id}</td>
-                    <td className="center">{row.total_score.toFixed(0)}</td>
-                    <td className="center">{row.correct_tips_count}</td>
-                    <td className="center" style={{ fontWeight: 700 }}>
-                      {row.average === NO_TIPS_SCORE ? '—' : row.average.toFixed(1)}
-                    </td>
+                    <td className="center" style={{ fontWeight: 700 }}>{row.total_score.toFixed(0)}</td>
                   </tr>
                 ))}
               </tbody>

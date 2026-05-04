@@ -11,9 +11,8 @@ export async function POST(req: NextRequest) {
   const round_id = Number(formData.get('round_id'))
   const game_id = Number(formData.get('game_id'))
   const team_id = Number(formData.get('team_id'))
-  const predicted_margin = Number(formData.get('predicted_margin'))
 
-  if (!competition_id || !round_id || !game_id || !team_id || isNaN(predicted_margin) || predicted_margin < 0) {
+  if (!competition_id || !round_id || !game_id || !team_id) {
     return NextResponse.redirect(new URL('/margin?error=missing_fields', req.url))
   }
 
@@ -43,26 +42,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(new URL('/margin?error=no_entry', req.url))
   }
 
-  // Delete any existing tip for this entry+round (one tip per round rule)
-  await supabase
-    .from('margin_tips')
-    .delete()
-    .eq('entry_id', entry.id)
-    .eq('round_id', round_id)
-
-  // Insert the new tip
+  // Upsert tip for this entry+game (one tip per game, keyed on entry_id+game_id)
   const { error } = await supabase
     .from('margin_tips')
-    .insert({
-      entry_id: entry.id,
-      game_id,
-      round_id,
-      team_id,
-      predicted_margin,
-    })
+    .upsert(
+      { entry_id: entry.id, game_id, round_id, team_id },
+      { onConflict: 'entry_id,game_id' }
+    )
 
   if (error) {
-    console.error('Margin tip insert error:', error)
+    console.error('Margin tip upsert error:', error)
     return NextResponse.redirect(new URL('/margin?error=tips_save_failed', req.url))
   }
 
