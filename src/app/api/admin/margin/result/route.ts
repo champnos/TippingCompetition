@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
     const entryTips = tipsByEntry.get(entry.id) ?? []
 
     if (entryTips.length === 0) {
-      // No tips submitted for the round — flat -50 penalty (no multiplier)
+      // No tips submitted for the round — flat -50 penalty (multiplier stored as 1 for record-keeping)
       roundScoreByEntry.set(entry.id, -50)
 
       // Insert a no_tip sentinel row using the first game in the round
@@ -199,14 +199,9 @@ export async function POST(req: NextRequest) {
   const totalCorrectByEntry = new Map<number, number>()
 
   for (const t of allScoredTips ?? []) {
-    if (t.result === 'no_tip') {
-      // no_tip row carries the -50 flat penalty
-      totalByEntry.set(t.entry_id, (totalByEntry.get(t.entry_id) ?? 0) + Number(t.final_score ?? 0))
-    } else {
-      totalByEntry.set(t.entry_id, (totalByEntry.get(t.entry_id) ?? 0) + Number(t.final_score ?? 0))
-      if (t.result === 'win') {
-        totalCorrectByEntry.set(t.entry_id, (totalCorrectByEntry.get(t.entry_id) ?? 0) + 1)
-      }
+    totalByEntry.set(t.entry_id, (totalByEntry.get(t.entry_id) ?? 0) + Number(t.final_score ?? 0))
+    if (t.result === 'win') {
+      totalCorrectByEntry.set(t.entry_id, (totalCorrectByEntry.get(t.entry_id) ?? 0) + 1)
     }
   }
 
