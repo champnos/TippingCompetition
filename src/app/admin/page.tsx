@@ -276,7 +276,8 @@ export default async function AdminPage({
               <label className="form-label">CSV File</label>
               <input type="file" name="csv_file" accept=".csv" required className="form-input" />
             </div>
-            <div className="form-field" style={{ justifyContent: 'flex-end' }}>
+            <div className="form-field" style={{ justifyContent: 'flex-end', gap: 10, display: 'flex', alignItems: 'flex-end' }}>
+              <a href="/api/admin/game/template" className="btn btn-sm btn-primary">📥 Fixture Template</a>
               <button type="submit" className="btn btn-gold">Import Fixtures</button>
             </div>
           </div>
@@ -492,7 +493,7 @@ export default async function AdminPage({
               <input type="file" name="csv_file" accept=".csv" required className="form-input" />
             </div>
             <div className="form-field" style={{ justifyContent: 'flex-end', gap: 10, display: 'flex', alignItems: 'flex-end' }}>
-              <a href="/api/admin/result/import" download="results_template.csv" className="btn btn-sm btn-primary">Download CSV Template</a>
+              <a href="/api/admin/result/template" className="btn btn-sm btn-primary">📥 Results Template</a>
               <button type="submit" className="btn btn-gold">Import Results</button>
             </div>
           </div>
